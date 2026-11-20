@@ -1,4 +1,3303 @@
-// =========================================================
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Kebun Hangat — Game Bertani 3D Isometrik</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      overflow: hidden;
+      background-color: #9dc466;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      color: #4a3525;
+    }
+
+    #game-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* Bingkai vignette putih lembut bergaya ilustrasi cat air */
+    .vignette-frame {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+      box-shadow:
+        inset 0 0 22px 10px rgba(255, 255, 255, 0.98),
+        inset 0 0 65px 28px rgba(255, 252, 244, 0.85),
+        inset 0 0 110px 10px rgba(255, 248, 232, 0.35);
+    }
+
+    /* HUD Atas */
+    .top-hud {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      right: 18px;
+      z-index: 20;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      gap: 10px;
+    }
+
+    .hud-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      pointer-events: auto;
+    }
+
+    .pill {
+      background: rgba(255, 251, 242, 0.92);
+      border: 2px solid #d7b786;
+      border-radius: 999px;
+      padding: 7px 14px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #5b3e26;
+      box-shadow: 0 4px 12px rgba(105, 72, 34, 0.14);
+      backdrop-filter: blur(4px);
+    }
+
+    .btn-next-day {
+      cursor: pointer;
+      background: linear-gradient(180deg, #ffdf8e 0%, #f0b84b 100%);
+      border: 2px solid #c58927;
+      color: #4f3112;
+      transition: transform 0.12s ease, filter 0.12s ease;
+    }
+
+    .btn-next-day:hover {
+      filter: brightness(1.04);
+      transform: translateY(-1px);
+    }
+
+    .btn-next-day:active {
+      transform: translateY(1px) scale(0.97);
+    }
+
+    /* Bar Tenaga Hati & Jam 24 Jam */
+    .hearts-pill {
+      padding: 6px 13px;
+      gap: 6px;
+    }
+
+    .hearts-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 1px;
+      font-size: 13px;
+      letter-spacing: -1px;
+    }
+
+    .heart-empty {
+      opacity: 0.28;
+      filter: grayscale(0.8);
+    }
+
+    .clock-pill {
+      min-width: 142px;
+      justify-content: center;
+    }
+
+    .phase-tag {
+      font-size: 12px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(215, 183, 134, 0.35);
+      color: #5b3e26;
+    }
+
+    /* Overlay Transisi Hari & Modal */
+    .day-fade {
+      position: fixed;
+      inset: 0;
+      background: #14192b;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 40;
+      transition: opacity 0.45s ease;
+    }
+
+    .day-fade.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(34, 24, 16, 0.52);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-card {
+      width: 100%;
+      max-width: 440px;
+      max-height: 88vh;
+      overflow-y: auto;
+      background: #fffaf0;
+      border: 3px solid #d4b27e;
+      border-radius: 24px;
+      padding: 20px 22px;
+      box-shadow: 0 16px 40px rgba(45, 28, 12, 0.32);
+      color: #4a3525;
+      text-align: center;
+    }
+
+    .modal-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 14px;
+      background: #f1e3c8;
+      padding: 4px;
+      border-radius: 14px;
+    }
+
+    .modal-tab {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 8px 6px;
+      border-radius: 10px;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #6f5238;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .modal-tab.active {
+      background: #fffaf0;
+      color: #4a3525;
+      box-shadow: 0 2px 6px rgba(96, 65, 28, 0.16);
+    }
+
+    .item-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 14px;
+      text-align: left;
+    }
+
+    .item-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: #f6ead4;
+      border: 1.5px solid #dec092;
+      border-radius: 14px;
+      padding: 9px 12px;
+    }
+
+    .item-info {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+    }
+
+    .item-icon {
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+
+    .item-name {
+      font-size: 13px;
+      font-weight: 800;
+      color: #4a3525;
+    }
+
+    .item-sub {
+      font-size: 11px;
+      color: #7a5c3e;
+      line-height: 1.3;
+    }
+
+    .item-action-btn {
+      flex-shrink: 0;
+      border: 2px solid #c58927;
+      background: linear-gradient(180deg, #ffdf8e 0%, #f0b84b 100%);
+      color: #4f3112;
+      border-radius: 10px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.1s ease, filter 0.1s ease;
+    }
+
+    .item-action-btn:hover:not(:disabled) {
+      filter: brightness(1.05);
+      transform: translateY(-1px);
+    }
+
+    .item-action-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .item-action-btn.sell-btn {
+      border-color: #5c913b;
+      background: linear-gradient(180deg, #b8e396 0%, #8bc663 100%);
+      color: #244014;
+    }
+
+    .item-action-btn.owned-btn {
+      border-color: #b5a082;
+      background: #e8dcc6;
+      color: #6b563c;
+    }
+
+    .item-action-btn.in-cart-btn {
+      border-color: #3b72bd;
+      background: linear-gradient(180deg, #9cc4f5 0%, #689de3 100%);
+      color: #152f54;
+    }
+
+    /* Kontrol Jumlah Barang (+/-) & Ringkasan Keranjang */
+    .qty-control {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .qty-btn {
+      width: 26px;
+      height: 26px;
+      border: 1.5px solid #c58927;
+      background: linear-gradient(180deg, #ffdf8e 0%, #f0b84b 100%);
+      color: #4f3112;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 900;
+      line-height: 1;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s ease, filter 0.1s ease;
+    }
+
+    .qty-btn:hover:not(:disabled) {
+      filter: brightness(1.06);
+      transform: translateY(-1px);
+    }
+
+    .qty-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .qty-val {
+      min-width: 24px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 800;
+      color: #4a3525;
+    }
+
+    .qty-max-btn {
+      border: 1.5px solid #5c913b;
+      background: #dcf2c9;
+      color: #244014;
+      border-radius: 8px;
+      padding: 4px 6px;
+      font-size: 10.5px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .qty-max-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .cart-summary {
+      background: #f5e6cb;
+      border: 2px solid #d4b27e;
+      border-radius: 16px;
+      padding: 11px 12px;
+      margin-bottom: 12px;
+      text-align: left;
+    }
+
+    .cart-summary-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #4a3525;
+      margin-bottom: 5px;
+    }
+
+    .cart-summary-items {
+      font-size: 11.5px;
+      color: #6b4e32;
+      line-height: 1.45;
+      margin-bottom: 9px;
+    }
+
+    .cart-summary-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .cart-clear-btn {
+      flex: 0 0 auto;
+      border: 1.5px solid #c9a97c;
+      background: #efe1c6;
+      color: #6b4e32;
+      border-radius: 11px;
+      padding: 8px 11px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .cart-clear-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .cart-confirm-btn {
+      flex: 1;
+      border: 2px solid #c58927;
+      background: linear-gradient(180deg, #ffdf8e 0%, #f0b84b 100%);
+      color: #4f3112;
+      border-radius: 11px;
+      padding: 9px 12px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.1s ease, filter 0.1s ease;
+    }
+
+    .cart-confirm-btn.sell-confirm {
+      border-color: #5c913b;
+      background: linear-gradient(180deg, #b8e396 0%, #8bc663 100%);
+      color: #244014;
+    }
+
+    .cart-confirm-btn:hover:not(:disabled) {
+      filter: brightness(1.05);
+      transform: translateY(-1px);
+    }
+
+    .cart-confirm-btn:disabled {
+      opacity: 0.48;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .tool-badge {
+      position: absolute;
+      bottom: 4px;
+      right: 5px;
+      background: #5b3e26;
+      color: #fffaf0;
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 1px 5px;
+      border-radius: 999px;
+      line-height: 1.2;
+    }
+
+    .tool-star {
+      position: absolute;
+      top: 3px;
+      left: 5px;
+      font-size: 10px;
+      display: none;
+    }
+
+    .tool-btn.upgraded .tool-star {
+      display: block;
+    }
+
+    .tool-btn.hidden-tool {
+      display: none;
+    }
+
+    .courier-banner {
+      position: fixed;
+      top: 112px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 22;
+      background: rgba(52, 92, 148, 0.92);
+      color: #ffffff;
+      border: 2px solid #9cc0f2;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12.5px;
+      font-weight: 700;
+      display: none;
+      align-items: center;
+      gap: 7px;
+      box-shadow: 0 4px 14px rgba(24, 45, 78, 0.25);
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .courier-banner.active {
+      display: flex;
+    }
+
+    .fishing-banner {
+      position: fixed;
+      top: 152px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 23;
+      background: rgba(29, 107, 130, 0.94);
+      color: #ffffff;
+      border: 2px solid #9ee3f5;
+      padding: 7px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 800;
+      display: none;
+      align-items: center;
+      gap: 7px;
+      box-shadow: 0 6px 18px rgba(18, 66, 82, 0.3);
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .fishing-banner.active {
+      display: flex;
+    }
+
+    .fishing-banner.bite {
+      background: rgba(219, 84, 42, 0.96);
+      border-color: #ffe28a;
+      animation: tutorialPulse 0.7s infinite;
+    }
+
+    /* Mini-Game Tarik-Ulur Memancing */
+    .reel-game {
+      position: fixed;
+      bottom: 118px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 26;
+      width: 300px;
+      max-width: calc(100vw - 36px);
+      background: rgba(255, 250, 240, 0.96);
+      border: 2.5px solid #2b7a94;
+      border-radius: 18px;
+      padding: 10px 14px;
+      box-shadow: 0 10px 26px rgba(18, 66, 82, 0.28);
+      display: none;
+      flex-direction: column;
+      gap: 7px;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .reel-game.active {
+      display: flex;
+    }
+
+    .reel-title {
+      font-size: 12.5px;
+      font-weight: 800;
+      color: #1d576b;
+    }
+
+    .reel-track {
+      position: relative;
+      height: 24px;
+      background: #d7eef5;
+      border: 2px solid #74b8cc;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .reel-zone {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      background: rgba(102, 199, 98, 0.62);
+      border-left: 2px solid #3c8f38;
+      border-right: 2px solid #3c8f38;
+      border-radius: 8px;
+    }
+
+    .reel-fish {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 16px;
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    .reel-prog-wrap {
+      height: 8px;
+      background: #e9dec8;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .reel-prog-fill {
+      height: 100%;
+      width: 35%;
+      background: linear-gradient(90deg, #52b859, #2f9638);
+      transition: width 0.05s linear;
+    }
+
+    .item-row.fish-locked {
+      opacity: 0.72;
+      background: #ece2cf;
+      border-style: dashed;
+    }
+
+    /* Kartu Tutorial Interaktif Awal Permainan */
+    .tutorial-card {
+      position: fixed;
+      top: 72px;
+      left: 18px;
+      z-index: 24;
+      width: 320px;
+      max-width: calc(100vw - 36px);
+      background: rgba(255, 250, 240, 0.96);
+      border: 2.5px solid #d98c3f;
+      border-radius: 18px;
+      padding: 12px 14px;
+      box-shadow: 0 8px 22px rgba(74, 48, 20, 0.22);
+      color: #4a3525;
+      backdrop-filter: blur(6px);
+      display: none;
+    }
+
+    .tutorial-card.active {
+      display: block;
+    }
+
+    .tutorial-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+
+    .tutorial-step-badge {
+      background: #e68a39;
+      color: #fffaf0;
+      font-size: 10.5px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 999px;
+      letter-spacing: 0.3px;
+    }
+
+    .tutorial-skip-btn {
+      background: transparent;
+      border: none;
+      color: #9e7e56;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .tutorial-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #5b3e26;
+      margin-bottom: 4px;
+    }
+
+    .tutorial-body {
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: #6b4e32;
+    }
+
+    .tutorial-progress {
+      margin-top: 7px;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #b85d22;
+      background: #faecd4;
+      border-radius: 8px;
+      padding: 4px 8px;
+    }
+
+    @keyframes tutorialPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(230, 138, 57, 0.7); }
+      50% { box-shadow: 0 0 0 8px rgba(230, 138, 57, 0); }
+    }
+
+    .tutorial-highlight {
+      animation: tutorialPulse 1.3s infinite;
+      border-color: #e68a39 !important;
+    }
+
+    .weather-pill.rainy {
+      background: rgba(224, 240, 255, 0.94);
+      border-color: #6fa3d4;
+      color: #21466b;
+    }
+
+    .guide-note {
+      background: #f6ead4;
+      border: 1.5px solid #dec092;
+      border-radius: 12px;
+      padding: 9px 11px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #5b3e26;
+      text-align: left;
+      margin-bottom: 12px;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      color: #5b3e26;
+    }
+
+    .modal-desc {
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: #6f5238;
+      margin-bottom: 14px;
+    }
+
+    .modal-status {
+      background: #f6ead4;
+      border: 1.5px solid #dec092;
+      border-radius: 14px;
+      padding: 10px 12px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .modal-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .modal-btn {
+      width: 100%;
+      border: 2px solid transparent;
+      border-radius: 14px;
+      padding: 11px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.12s ease, filter 0.12s ease;
+    }
+
+    .modal-btn:hover {
+      filter: brightness(1.04);
+      transform: translateY(-1px);
+    }
+
+    .modal-btn:active {
+      transform: translateY(1px);
+    }
+
+    .modal-btn-rest {
+      background: linear-gradient(180deg, #b8e396 0%, #8bc663 100%);
+      border-color: #679c43;
+      color: #244014;
+    }
+
+    .modal-btn-sleep {
+      background: linear-gradient(180deg, #8aa7e8 0%, #5e7bc4 100%);
+      border-color: #425c9c;
+      color: #ffffff;
+    }
+
+    .modal-btn-close {
+      background: #f0e2c8;
+      border-color: #d4b88a;
+      color: #5b3e26;
+    }
+
+    .modal-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Notifikasi Toast */
+    .toast {
+      position: fixed;
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-10px);
+      z-index: 25;
+      background: rgba(74, 53, 37, 0.9);
+      color: #fffaf0;
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      white-space: nowrap;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Toolbar Alat di Bawah */
+    .toolbar-wrap {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      max-width: calc(100vw - 24px);
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      background: rgba(255, 250, 240, 0.94);
+      border: 2.5px solid #d4b27e;
+      border-radius: 22px;
+      padding: 8px 10px;
+      box-shadow: 0 8px 24px rgba(96, 65, 28, 0.22);
+      backdrop-filter: blur(6px);
+    }
+
+    .tool-btn {
+      position: relative;
+      border: 2px solid transparent;
+      background: #f6ead4;
+      border-radius: 15px;
+      padding: 8px 12px;
+      min-width: 64px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      color: #5b3e26;
+    }
+
+    .tool-btn:hover {
+      background: #efe0c1;
+      transform: translateY(-2px);
+    }
+
+    .tool-btn.active {
+      background: #fff8e7;
+      border-color: #d97a38;
+      box-shadow: 0 4px 10px rgba(217, 122, 56, 0.28);
+      transform: translateY(-4px);
+    }
+
+    .tool-icon {
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .tool-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+
+    .tool-key {
+      position: absolute;
+      top: 4px;
+      right: 6px;
+      font-size: 9px;
+      font-weight: 700;
+      color: #9e7e56;
+    }
+
+    .tip-badge {
+      position: fixed;
+      bottom: 96px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 15;
+      font-size: 12px;
+      color: #5e4226;
+      background: rgba(255, 252, 244, 0.86);
+      border: 1px solid rgba(212, 178, 126, 0.65);
+      padding: 5px 14px;
+      border-radius: 999px;
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(96, 65, 28, 0.1);
+    }
+
+    @media (max-width: 680px) {
+      .toolbar { gap: 4px; padding: 6px 7px; }
+      .tool-btn {
+        min-width: 44px;
+        padding: 6px 4px;
+      }
+      .tool-icon { font-size: 18px; }
+      .tool-label { font-size: 9.5px; }
+      .tool-key { display: none; }
+      .pill { font-size: 12px; padding: 6px 10px; }
+      .tip-badge { font-size: 11px; white-space: normal; text-align: center; width: 88vw; }
+    }
+  </style>
+
+  <!-- Three.js via CDN (ES Modules, zero-build) -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="game-container"></div>
+  <div class="vignette-frame"></div>
+  <div class="day-fade" id="day-fade"></div>
+
+  <!-- HUD Atas -->
+  <div class="top-hud">
+    <div class="hud-group">
+      <div class="pill">📅 Hari <span id="ui-day">1</span></div>
+      <div class="pill clock-pill">
+        <span id="ui-phase-icon">🌅</span>
+        <span id="ui-clock">06:00</span>
+        <span class="phase-tag" id="ui-phase">Pagi</span>
+      </div>
+      <div class="pill weather-pill" id="ui-weather-pill" title="Cuaca hari ini">☀️ Cerah</div>
+      <div class="pill">🪙 <span id="ui-coins">0</span></div>
+      <div class="pill" title="Total hasil panen di gudang">🧺 <span id="ui-harvest">0</span></div>
+      <div class="pill hearts-pill" title="Tenaga Petani (Istirahat/Tidur di Rumah untuk memulihkan)">
+        <span class="hearts-bar" id="ui-hearts-bar"></span>
+        <span id="ui-energy-text">10/10</span>
+      </div>
+    </div>
+    <div class="hud-group">
+      <button class="pill btn-next-day" id="btn-open-guide" title="Buku petunjuk lama panen & tips bertani">
+        📖 Petunjuk
+      </button>
+      <button class="pill btn-next-day" id="btn-open-storage" title="Buka gudang penyimpanan hasil tani & bibit">
+        📦 Gudang
+      </button>
+      <button class="pill btn-next-day" id="btn-open-shop" title="Belanja bibit, upgrade alat canggih & jual hasil tani">
+        📱 Toko Online
+      </button>
+      <button class="pill btn-next-day" id="btn-go-home" title="Jalan ke rumah petani untuk istirahat atau tidur">
+        🏠 Rumah
+      </button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Selamat datang di kebun!</div>
+  <div class="courier-banner" id="courier-banner">🚚 Kurir sedang dalam perjalanan...</div>
+  <div class="fishing-banner" id="fishing-banner">🎣 Menunggu ikan menyambar...</div>
+
+  <!-- Mini-Game Tarik-Ulur Memancing -->
+  <div class="reel-game" id="reel-game">
+    <div class="reel-title">🎣 Tahan Klik / Spasi agar zona hijau mengikuti ikan!</div>
+    <div class="reel-track">
+      <div class="reel-zone" id="reel-zone"></div>
+      <div class="reel-fish" id="reel-fish">🐟</div>
+    </div>
+    <div class="reel-prog-wrap">
+      <div class="reel-prog-fill" id="reel-prog-fill"></div>
+    </div>
+  </div>
+
+  <!-- Modal Petunjuk Memancing Pertama Kali -->
+  <div class="modal-backdrop" id="fishing-guide-modal">
+    <div class="modal-card">
+      <div class="modal-title">🎣 Selamat! Kamu Mendapatkan Alat Pancing</div>
+      <div class="modal-desc">Sekarang kamu bisa memancing di sungai secara gratis (<strong>0 ❤️ tenaga</strong>)!</div>
+      <div class="guide-note">
+        <strong>Cara Memancing:</strong><br/>
+        1. Pilih <strong>🎣 Pancing (tombol 8)</strong> lalu klik air sungai.<br/>
+        2. Tunggu bayangan ikan mendekat dan menyenggol umpan 1–3 kali (jangan ditarik dulu!).<br/>
+        3. Saat pelampung tenggelam & muncul <strong>❗</strong>, klik layar atau tekan <strong>Spasi</strong>.<br/>
+        4. <strong>Tahan Klik / Spasi</strong> untuk menggerakkan zona hijau mengikuti ikan sampai bar penuh!
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-rest" id="btn-close-fishing-guide">Siap Memancing! 🎣</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kartu Tutorial Awal Permainan -->
+  <div class="tutorial-card active" id="tutorial-card">
+    <div class="tutorial-header">
+      <span class="tutorial-step-badge" id="tutorial-step-badge">Langkah 1 / 6</span>
+      <button class="tutorial-skip-btn" id="btn-skip-tutorial">Lewati Tutorial</button>
+    </div>
+    <div class="tutorial-title" id="tutorial-title">🧺 Panen 2 Bunga Pertama</div>
+    <div class="tutorial-body" id="tutorial-body"></div>
+    <div class="tutorial-progress" id="tutorial-progress"></div>
+  </div>
+
+  <div class="tip-badge">⬆️⬇️⬅️➡️ Jalan • Spasi / Klik Petak, Hewan, Peti & Rumah • Buka 📖 Petunjuk untuk info tanaman!</div>
+
+  <!-- Modal Buku Petunjuk Tanaman & Ikan -->
+  <div class="modal-backdrop" id="guide-modal">
+    <div class="modal-card">
+      <div class="modal-title">📖 Buku Petunjuk Kebun</div>
+      <div class="modal-desc" id="guide-desc">Pelajari lama waktu panen tanaman & koleksi ikan sungai.</div>
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-guide-tab="crops">🌱 Tanaman</button>
+        <button class="modal-tab" data-guide-tab="fish">🐟 Ikan Sungai</button>
+      </div>
+      <div class="item-list" id="guide-list"></div>
+      <div class="guide-note" id="guide-note">
+        <strong>💡 Tips Bertani:</strong><br/>
+        • Tanaman tumbuh 1 hari setiap kali kamu <strong>tidur malam</strong> setelah disiram.<br/>
+        • Saat hari <strong>🌧️ Hujan</strong> (jarang terjadi), seluruh petak otomatis basah — kamu tidak perlu menyiram!<br/>
+        • Tidur sebelum <strong>23:00</strong> agar tenaga pulih penuh 10/10 ❤️.
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-close" id="btn-close-guide">Tutup Buku</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Gudang Penyimpanan (Storage) -->
+  <div class="modal-backdrop" id="storage-modal">
+    <div class="modal-card">
+      <div class="modal-title">📦 Gudang Penyimpanan</div>
+      <div class="modal-desc">Semua hasil panen, stok bibit, dan peralatan canggih tersimpan rapi di sini.</div>
+      <div class="item-list" id="storage-list"></div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-rest" id="btn-storage-to-shop">📱 Buka Toko Online (Beli / Jual)</button>
+        <button class="modal-btn modal-btn-close" id="btn-close-storage">Tutup Gudang</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Belanja Online & Jual Hasil Tani -->
+  <div class="modal-backdrop" id="shop-modal">
+    <div class="modal-card">
+      <div class="modal-title">📱 Toko Tani Online</div>
+      <div class="modal-desc">
+        Saldo: <strong id="shop-coins">0</strong> 🪙 • Kurir desa siap mengantar & menjemput pesananmu!
+      </div>
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-shop-tab="seeds">🌱 Bibit</button>
+        <button class="modal-tab" data-shop-tab="tools">⚡ Alat Canggih</button>
+        <button class="modal-tab" data-shop-tab="sell">💰 Jual Panen</button>
+      </div>
+      <div class="item-list" id="shop-list"></div>
+      <div class="cart-summary" id="shop-cart-summary"></div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-close" id="btn-close-shop">Tutup Toko</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Rumah Petani -->
+  <div class="modal-backdrop" id="house-modal">
+    <div class="modal-card">
+      <div class="modal-title">🏠 Rumah Petani</div>
+      <div class="modal-desc" id="house-modal-desc">
+        Tempat hangat untuk melepas lelah setelah berkebun.
+      </div>
+      <div class="modal-status">
+        <div>⏰ Waktu: <strong id="modal-time">06:00 (Pagi)</strong></div>
+        <div>❤️ Tenaga: <strong id="modal-energy">10 / 10 Hati</strong></div>
+        <div id="modal-sleep-preview" style="color:#5c4328; font-size:12px;"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-rest" id="btn-rest-hour">☕ Istirahat 1 Jam (+2 ❤️)</button>
+        <button class="modal-btn modal-btn-sleep" id="btn-sleep-night">🛏️ Tidur Malam (Bangun 06:00)</button>
+        <button class="modal-btn modal-btn-close" id="btn-close-house">Kembali ke Kebun</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Laporan Pagi -->
+  <div class="modal-backdrop" id="report-modal">
+    <div class="modal-card">
+      <div class="modal-title" id="report-title">🌅 Selamat Pagi!</div>
+      <div class="modal-desc" id="report-desc"></div>
+      <div class="modal-status" id="report-details"></div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-rest" id="btn-close-report">Mulai Beraktivitas</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toolbar Alat -->
+  <div class="toolbar-wrap">
+    <div class="toolbar">
+      <button class="tool-btn active" data-tool="hoe" id="tool-btn-hoe">
+        <span class="tool-star">⭐</span>
+        <span class="tool-key">1</span>
+        <span class="tool-icon">⛏️</span>
+        <span class="tool-label">Cangkul</span>
+      </button>
+      <button class="tool-btn" data-tool="seed_cabbage" id="tool-btn-seed-cabbage" title="Kubis (Panen 2 hari)">
+        <span class="tool-star">⭐</span>
+        <span class="tool-key">2</span>
+        <span class="tool-icon">🥬</span>
+        <span class="tool-label">Kubis</span>
+        <span class="tool-badge" id="badge-seed-cabbage">0</span>
+      </button>
+      <button class="tool-btn" data-tool="seed_carrot" id="tool-btn-seed-carrot" title="Wortel (Panen 3 hari)">
+        <span class="tool-star">⭐</span>
+        <span class="tool-key">3</span>
+        <span class="tool-icon">🥕</span>
+        <span class="tool-label">Wortel</span>
+        <span class="tool-badge" id="badge-seed-carrot">0</span>
+      </button>
+      <button class="tool-btn" data-tool="seed_white" id="tool-btn-seed-white" title="Aster (Panen 4 hari)">
+        <span class="tool-star">⭐</span>
+        <span class="tool-key">4</span>
+        <span class="tool-icon">🌼</span>
+        <span class="tool-label">Aster</span>
+        <span class="tool-badge" id="badge-seed-white">0</span>
+      </button>
+      <button class="tool-btn" data-tool="seed_red" id="tool-btn-seed-red" title="Mawar (Panen 5 hari)">
+        <span class="tool-star">⭐</span>
+        <span class="tool-key">5</span>
+        <span class="tool-icon">🌹</span>
+        <span class="tool-label">Mawar</span>
+        <span class="tool-badge" id="badge-seed-red">0</span>
+      </button>
+      <button class="tool-btn" data-tool="water" id="tool-btn-water">
+        <span class="tool-star">⭐</span>
+        <span class="tool-key">6</span>
+        <span class="tool-icon">💧</span>
+        <span class="tool-label">Siram</span>
+      </button>
+      <button class="tool-btn" data-tool="harvest" id="tool-btn-harvest">
+        <span class="tool-star">⭐</span>
+        <span class="tool-key">7</span>
+        <span class="tool-icon">🧺</span>
+        <span class="tool-label">Panen</span>
+      </button>
+      <button class="tool-btn hidden-tool" data-tool="rod" id="tool-btn-rod" title="Alat Pancing — Klik sungai untuk memancing!">
+        <span class="tool-star">⭐</span>
+        <span class="tool-key">8</span>
+        <span class="tool-icon">🎣</span>
+        <span class="tool-label">Pancing</span>
+      </button>
+    </div>
+  </div>
+  <script type="module">
+    import * as THREE from 'three';
+
+    // =========================================================
+    // 1. KONFIGURASI TANAMAN, STATE GAME & UI
+    // =========================================================
+    const CROPS = {
+      cabbage: {
+        name: 'Kubis',
+        icon: '🥬',
+        daysToGrow: 2,
+        seedKey: 'seed_cabbage',
+        storageKey: 'cabbage',
+        sellPrice: 22,
+        packPrice: 18,
+        burstColor: 0x81c784
+      },
+      carrot: {
+        name: 'Wortel',
+        icon: '🥕',
+        daysToGrow: 3,
+        seedKey: 'seed_carrot',
+        storageKey: 'carrot',
+        sellPrice: 30,
+        packPrice: 24,
+        burstColor: 0xff8a3d
+      },
+      white: {
+        name: 'Aster',
+        icon: '🌼',
+        daysToGrow: 4,
+        seedKey: 'seed_white',
+        storageKey: 'daisy',
+        sellPrice: 38,
+        packPrice: 28,
+        burstColor: 0xffe066
+      },
+      red: {
+        name: 'Mawar',
+        icon: '🌹',
+        daysToGrow: 5,
+        seedKey: 'seed_red',
+        storageKey: 'rose',
+        sellPrice: 50,
+        packPrice: 35,
+        burstColor: 0xf25c54
+      }
+    };
+
+    const SEED_TOOL_TO_CROP = {
+      seed_cabbage: 'cabbage',
+      seed_carrot: 'carrot',
+      seed_white: 'white',
+      seed_red: 'red'
+    };
+
+    const FISH_SPECIES = {
+      ikan_mas: {
+        name: 'Ikan Mas',
+        icon: '🐟',
+        rarity: 'Umum',
+        weight: 34,
+        proWeight: 22,
+        minCm: 15,
+        maxCm: 45,
+        basePrice: 18,
+        desc: 'Ikan sungai berwarna keemasan yang mudah ditemui di perairan dangkal.'
+      },
+      nila: {
+        name: 'Ikan Nila',
+        icon: '🐠',
+        rarity: 'Umum',
+        weight: 28,
+        proWeight: 22,
+        minCm: 18,
+        maxCm: 52,
+        basePrice: 24,
+        desc: 'Hidup bergerombol dekat daun teratai. Dagingnya gurih dan disukai warga desa.'
+      },
+      lele: {
+        name: 'Ikan Lele',
+        icon: '🐡',
+        rarity: 'Sedang',
+        weight: 18,
+        proWeight: 20,
+        minCm: 25,
+        maxCm: 78,
+        basePrice: 34,
+        desc: 'Berkumis panjang dan aktif di dasar sungai, terutama saat sore atau mendung.'
+      },
+      gabus: {
+        name: 'Ikan Gabus',
+        icon: '🐟',
+        rarity: 'Langka',
+        weight: 11,
+        proWeight: 16,
+        minCm: 35,
+        maxCm: 95,
+        basePrice: 52,
+        desc: 'Ikan predator sungai yang gesit. Tarikannya cukup kuat saat menyambar umpan.'
+      },
+      salmon: {
+        name: 'Salmon Sungai',
+        icon: '🍣',
+        rarity: 'Sangat Langka',
+        weight: 6,
+        proWeight: 12,
+        minCm: 45,
+        maxCm: 120,
+        basePrice: 78,
+        desc: 'Ikan perenang ulung berukuran besar dengan harga jual sangat tinggi.'
+      },
+      koi_emas: {
+        name: 'Koi Emas Legendaris',
+        icon: '✨',
+        rarity: 'Legendaris',
+        weight: 3,
+        proWeight: 8,
+        minCm: 30,
+        maxCm: 92,
+        basePrice: 125,
+        desc: 'Ikan pembawa keberuntungan yang berkilau! Lebih sering muncul dengan Pancing Pro.'
+      }
+    };
+
+    const FISH_ORDER = ['ikan_mas', 'nila', 'lele', 'gabus', 'salmon', 'koi_emas'];
+
+    const state = {
+      tool: 'harvest',
+      day: 1,
+      coins: 0,
+      weather: 'sunny',
+      storage: {
+        seed_cabbage: 0,
+        seed_carrot: 0,
+        seed_white: 0,
+        seed_red: 0,
+        cabbage: 0,
+        carrot: 0,
+        daisy: 0,
+        rose: 0,
+        fish: []
+      },
+      hasRod: false,
+      upgrades: {
+        hoe: false,
+        planter: false,
+        water: false,
+        harvest: false,
+        rod: false
+      },
+      fishCodex: {},
+      guideTab: 'crops',
+      tutorial: {
+        active: true,
+        step: 0,
+        harvestedInit: 0,
+        tilled: false,
+        planted: false,
+        watered: false
+      },
+      buyCart: {
+        seeds: {
+          seed_cabbage: 0,
+          seed_carrot: 0,
+          seed_white: 0,
+          seed_red: 0
+        },
+        tools: {
+          hoe: false,
+          water: false,
+          planter: false,
+          harvest: false,
+          rod: false
+        }
+      },
+      sellCart: {
+        cabbage: 0,
+        carrot: 0,
+        daisy: 0,
+        rose: 0,
+        fish: 0
+      },
+      shopTab: 'seeds',
+      timeMinutes: 6 * 60,
+      hoursAwake: 0,
+      energy: 10,
+      maxEnergy: 10,
+      isPaused: false,
+      warnedLate: false,
+      warnedVeryLate: false
+    };
+
+    const uiDay = document.getElementById('ui-day');
+    const uiCoins = document.getElementById('ui-coins');
+    const uiHarvest = document.getElementById('ui-harvest');
+    const uiClock = document.getElementById('ui-clock');
+    const uiPhase = document.getElementById('ui-phase');
+    const uiPhaseIcon = document.getElementById('ui-phase-icon');
+    const uiWeatherPill = document.getElementById('ui-weather-pill');
+    const uiHeartsBar = document.getElementById('ui-hearts-bar');
+    const uiEnergyText = document.getElementById('ui-energy-text');
+    const toastEl = document.getElementById('toast');
+    const courierBannerEl = document.getElementById('courier-banner');
+    const fishingBannerEl = document.getElementById('fishing-banner');
+
+    const tutorialCardEl = document.getElementById('tutorial-card');
+    const tutorialStepBadgeEl = document.getElementById('tutorial-step-badge');
+    const tutorialTitleEl = document.getElementById('tutorial-title');
+    const tutorialBodyEl = document.getElementById('tutorial-body');
+    const tutorialProgressEl = document.getElementById('tutorial-progress');
+    const btnSkipTutorial = document.getElementById('btn-skip-tutorial');
+
+    const guideModalEl = document.getElementById('guide-modal');
+    const guideDescEl = document.getElementById('guide-desc');
+    const guideListEl = document.getElementById('guide-list');
+    const guideNoteEl = document.getElementById('guide-note');
+    const btnCloseGuide = document.getElementById('btn-close-guide');
+    const guideTabButtons = document.querySelectorAll('[data-guide-tab]');
+
+    const badgeSeedCabbage = document.getElementById('badge-seed-cabbage');
+    const badgeSeedCarrot = document.getElementById('badge-seed-carrot');
+    const badgeSeedRed = document.getElementById('badge-seed-red');
+    const badgeSeedWhite = document.getElementById('badge-seed-white');
+
+    const storageModalEl = document.getElementById('storage-modal');
+    const storageListEl = document.getElementById('storage-list');
+    const btnCloseStorage = document.getElementById('btn-close-storage');
+    const btnStorageToShop = document.getElementById('btn-storage-to-shop');
+
+    const shopModalEl = document.getElementById('shop-modal');
+    const shopCoinsEl = document.getElementById('shop-coins');
+    const shopListEl = document.getElementById('shop-list');
+    const shopCartSummaryEl = document.getElementById('shop-cart-summary');
+    const btnCloseShop = document.getElementById('btn-close-shop');
+    const shopTabButtons = document.querySelectorAll('[data-shop-tab]');
+    const dayFadeEl = document.getElementById('day-fade');
+    const houseModalEl = document.getElementById('house-modal');
+    const modalTimeEl = document.getElementById('modal-time');
+    const modalEnergyEl = document.getElementById('modal-energy');
+    const modalSleepPreviewEl = document.getElementById('modal-sleep-preview');
+    const btnRestHour = document.getElementById('btn-rest-hour');
+    const btnSleepNight = document.getElementById('btn-sleep-night');
+    const btnCloseHouse = document.getElementById('btn-close-house');
+
+    const reportModalEl = document.getElementById('report-modal');
+    const reportTitleEl = document.getElementById('report-title');
+    const reportDescEl = document.getElementById('report-desc');
+    const reportDetailsEl = document.getElementById('report-details');
+    const btnCloseReport = document.getElementById('btn-close-report');
+
+    let toastTimer = null;
+
+    function getTimeInfo(totalMinutes) {
+      const minsInDay = ((Math.floor(totalMinutes) % 1440) + 1440) % 1440;
+      const h = Math.floor(minsInDay / 60);
+      const m = minsInDay % 60;
+      const clockStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+      let phase = 'Malam';
+      let icon = '🌙';
+      if (h >= 5 && h < 11) {
+        phase = 'Pagi';
+        icon = '🌅';
+      } else if (h >= 11 && h < 16) {
+        phase = 'Siang';
+        icon = '☀️';
+      } else if (h >= 16 && h < 19) {
+        phase = 'Sore';
+        icon = '🌇';
+      }
+      return { h, m, clockStr, phase, icon, hourFloat: minsInDay / 60 };
+    }
+
+    function getSleepRecoveryInfo() {
+      const { h } = getTimeInfo(state.timeMinutes);
+      if (state.hoursAwake >= 17 && (h >= 23 || h < 6)) {
+        if (h === 23 || h === 0) {
+          return { hearts: 7, note: '⚠️ Tidur agak larut malam: tenaga pulih 7/10 ❤️' };
+        }
+        if (h === 1 || h === 2) {
+          return { hearts: 5, note: '⚠️ Tidur terlalu larut malam: tenaga hanya pulih 5/10 ❤️' };
+        }
+        return { hearts: 4, note: '⚠️ Tidur sangat larut! Tenaga hanya pulih 4/10 ❤️' };
+      }
+      return { hearts: state.maxEnergy, note: '✨ Tidur tepat waktu: bangun pagi dengan 10/10 ❤️ penuh!' };
+    }
+
+    function updateHUD() {
+      uiDay.textContent = state.day;
+      uiCoins.textContent = state.coins;
+      uiHarvest.textContent =
+        state.storage.cabbage + state.storage.carrot + state.storage.daisy + state.storage.rose + state.storage.fish.length;
+
+      badgeSeedCabbage.textContent = state.storage.seed_cabbage;
+      badgeSeedCarrot.textContent = state.storage.seed_carrot;
+      badgeSeedRed.textContent = state.storage.seed_red;
+      badgeSeedWhite.textContent = state.storage.seed_white;
+
+      document.getElementById('tool-btn-hoe').classList.toggle('upgraded', state.upgrades.hoe);
+      document.getElementById('tool-btn-seed-cabbage').classList.toggle('upgraded', state.upgrades.planter);
+      document.getElementById('tool-btn-seed-carrot').classList.toggle('upgraded', state.upgrades.planter);
+      document.getElementById('tool-btn-seed-red').classList.toggle('upgraded', state.upgrades.planter);
+      document.getElementById('tool-btn-seed-white').classList.toggle('upgraded', state.upgrades.planter);
+      document.getElementById('tool-btn-water').classList.toggle('upgraded', state.upgrades.water);
+      document.getElementById('tool-btn-harvest').classList.toggle('upgraded', state.upgrades.harvest);
+
+      const rodBtn = document.getElementById('tool-btn-rod');
+      rodBtn.classList.toggle('hidden-tool', !state.hasRod);
+      rodBtn.classList.toggle('upgraded', state.upgrades.rod);
+
+      const info = getTimeInfo(state.timeMinutes);
+      uiClock.textContent = info.clockStr;
+      uiPhase.textContent = info.phase;
+      uiPhaseIcon.textContent = info.icon;
+
+      if (state.weather === 'rainy') {
+        uiWeatherPill.textContent = '🌧️ Hujan (Auto-Siram)';
+        uiWeatherPill.classList.add('rainy');
+      } else {
+        uiWeatherPill.textContent = '☀️ Cerah';
+        uiWeatherPill.classList.remove('rainy');
+      }
+
+      let html = '';
+      for (let i = 1; i <= state.maxEnergy; i++) {
+        html += i <= state.energy ? '<span>❤️</span>' : '<span class="heart-empty">❤️</span>';
+      }
+      uiHeartsBar.innerHTML = html;
+      uiEnergyText.textContent = `${state.energy}/${state.maxEnergy}`;
+
+      updateTutorialUI();
+    }
+
+    function clearTutorialHighlights() {
+      document.querySelectorAll('.tutorial-highlight').forEach(el => el.classList.remove('tutorial-highlight'));
+    }
+
+    function getTotalSeeds() {
+      return state.storage.seed_cabbage + state.storage.seed_carrot + state.storage.seed_white + state.storage.seed_red;
+    }
+
+    function updateTutorialUI() {
+      clearTutorialHighlights();
+      if (!state.tutorial.active) {
+        tutorialCardEl.classList.remove('active');
+        return;
+      }
+
+      tutorialCardEl.classList.add('active');
+      const s = state.tutorial.step;
+      tutorialStepBadgeEl.textContent = `Langkah ${s + 1} / 6`;
+
+      if (s === 0) {
+        tutorialTitleEl.textContent = '🧺 1. Panen 2 Bunga Siap Panen';
+        tutorialBodyEl.textContent = 'Kamu memulai tanpa uang! Pilih alat Panen (tombol 7), lalu klik 2 bunga yang sudah mekar di ladang untuk memanennya.';
+        tutorialProgressEl.textContent = `Progres: ${state.tutorial.harvestedInit} / 2 bunga dipanen`;
+        document.getElementById('tool-btn-harvest').classList.add('tutorial-highlight');
+      } else if (s === 1) {
+        tutorialTitleEl.textContent = '💰 2. Jual Kedua Bunga untuk Koin';
+        tutorialBodyEl.textContent = 'Buka 📱 Toko Online → tab 💰 Jual Panen, masukkan bunga Mawar & Aster ke keranjang jual (+ / Maks), lalu klik Konfirmasi Jual!';
+        const leftToSell = state.storage.rose + state.storage.daisy;
+        tutorialProgressEl.textContent = leftToSell > 0
+          ? `Sisa bunga di gudang: ${leftToSell} pcs (jual keduanya)`
+          : '🚚 Kurir sedang menjemput bunga & membawa koinmu...';
+        document.getElementById('btn-open-shop').classList.add('tutorial-highlight');
+      } else if (s === 2) {
+        tutorialTitleEl.textContent = '🌱 3. Beli Bibit Pertama';
+        tutorialBodyEl.textContent = 'Sekarang kamu punya koin! Buka 📱 Toko Online → tab 🌱 Bibit, atur jumlah paket bibit ke keranjang (+), lalu klik Konfirmasi Beli.';
+        const pendingDeliver = courier.currentOrder?.kind === 'deliver' || courier.queue.some(o => o.kind === 'deliver');
+        tutorialProgressEl.textContent = pendingDeliver
+          ? '🚚 Kurir sedang mengantar bibit ke peti rumah...'
+          : `Saldo saat ini: ${state.coins} 🪙`;
+        document.getElementById('btn-open-shop').classList.add('tutorial-highlight');
+      } else if (s === 3) {
+        tutorialTitleEl.textContent = '⛏️ 4. Cangkul Lahan Kosong';
+        tutorialBodyEl.textContent = 'Bibit sudah tiba di gudang! Pilih alat ⛏️ Cangkul (tombol 1), lalu klik salah satu petak tanah kosong yang belum dicangkul.';
+        tutorialProgressEl.textContent = 'Klik 1 petak kosong untuk mencangkul tanah';
+        document.getElementById('tool-btn-hoe').classList.add('tutorial-highlight');
+      } else if (s === 4) {
+        tutorialTitleEl.textContent = '🌿 5. Tanam Bibit di Petak';
+        tutorialBodyEl.textContent = 'Pilih bibit yang kamu miliki di toolbar bawah (tombol 2–5), lalu klik petak tanah yang sudah dicangkul.';
+        tutorialProgressEl.textContent = `Stok bibit tersedia: ${getTotalSeeds()} bibit`;
+        if (state.storage.seed_cabbage > 0) document.getElementById('tool-btn-seed-cabbage').classList.add('tutorial-highlight');
+        else if (state.storage.seed_carrot > 0) document.getElementById('tool-btn-seed-carrot').classList.add('tutorial-highlight');
+        else if (state.storage.seed_white > 0) document.getElementById('tool-btn-seed-white').classList.add('tutorial-highlight');
+        else if (state.storage.seed_red > 0) document.getElementById('tool-btn-seed-red').classList.add('tutorial-highlight');
+      } else if (s === 5) {
+        tutorialTitleEl.textContent = '💧 6. Siram Tanamanmu';
+        tutorialBodyEl.textContent = 'Terakhir, pilih alat 💧 Siram (tombol 6) lalu klik tanaman yang baru ditanam agar tumbuh keesokan harinya saat kamu tidur!';
+        tutorialProgressEl.textContent = 'Siram 1 tanaman untuk menyelesaikan tutorial';
+        document.getElementById('tool-btn-water').classList.add('tutorial-highlight');
+      }
+    }
+
+    function advanceTutorialIfReady() {
+      if (!state.tutorial.active) return;
+      const tut = state.tutorial;
+
+      if (tut.step === 0 && tut.harvestedInit >= 2) {
+        tut.step = 1;
+        showToast('🎉 Bagus! Sekarang jual kedua bunga di 📱 Toko Online → Jual Panen.');
+      }
+      if (tut.step === 1 && state.storage.rose === 0 && state.storage.daisy === 0 && state.coins > 0) {
+        const stillPickingUp = courier.currentOrder?.kind === 'pickup' || courier.queue.some(o => o.kind === 'pickup');
+        if (!stillPickingUp) {
+          tut.step = 2;
+          showToast('🪙 Koin diterima! Sekarang beli paket bibit di 📱 Toko Online.');
+        }
+      }
+      if (tut.step === 2 && getTotalSeeds() > 0) {
+        tut.step = 3;
+        showToast('🌱 Bibit tiba! Pilih ⛏️ Cangkul (1) dan cangkul petak tanah kosong.');
+      }
+      if (tut.step === 3 && tut.tilled) {
+        tut.step = 4;
+        showToast('✨ Tanah siap! Pilih bibit di toolbar lalu klik petak yang dicangkul.');
+      }
+      if (tut.step === 4 && tut.planted) {
+        tut.step = 5;
+        showToast('🌿 Tanaman tertanam! Sekarang pilih 💧 Siram (6) dan siram tanamanmu.');
+      }
+      if (tut.step === 5 && tut.watered) {
+        tut.active = false;
+        showToast('🎊 Tutorial selesai! Buka 📖 Petunjuk kapan saja untuk melihat lama panen tanaman.');
+      }
+      updateTutorialUI();
+    }
+
+    btnSkipTutorial.addEventListener('click', () => {
+      state.tutorial.active = false;
+      updateTutorialUI();
+      showToast('Tutorial dilewati. Buka 📖 Petunjuk kapan saja untuk panduan tanaman!');
+    });
+
+    function showToast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+    }
+
+    const toolButtons = document.querySelectorAll('.tool-btn');
+    function selectTool(toolName) {
+      state.tool = toolName;
+      toolButtons.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tool === toolName);
+      });
+    }
+
+    toolButtons.forEach(btn => {
+      btn.addEventListener('click', () => selectTool(btn.dataset.tool));
+    });
+
+    // =========================================================
+    // 2. SETUP SCENE, KAMERA ISOMETRIK & RENDERER
+    // =========================================================
+    const container = document.getElementById('game-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x96bf5c);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    container.appendChild(renderer.domElement);
+
+    let frustumSize = window.innerWidth < 640 ? 19.5 : 15.2;
+    const camOffset = new THREE.Vector3(20, 19, 20);
+    const camLookTarget = new THREE.Vector3(0.8, 0, 0.6);
+
+    function createCamera() {
+      const aspect = window.innerWidth / window.innerHeight;
+      const cam = new THREE.OrthographicCamera(
+        (-frustumSize * aspect) / 2,
+        (frustumSize * aspect) / 2,
+        frustumSize / 2,
+        -frustumSize / 2,
+        0.1,
+        140
+      );
+      cam.position.copy(camLookTarget).add(camOffset);
+      cam.lookAt(camLookTarget);
+      return cam;
+    }
+    const camera = createCamera();
+
+    const hemiLight = new THREE.HemisphereLight(0xfff7e6, 0xc7954b, 1.35);
+    scene.add(hemiLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfff1cc, 1.15);
+    sunLight.position.set(18, 28, 14);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 5;
+    sunLight.shadow.camera.far = 75;
+    const s = 22;
+    sunLight.shadow.camera.left = -s;
+    sunLight.shadow.camera.right = s;
+    sunLight.shadow.camera.top = s;
+    sunLight.shadow.camera.bottom = -s;
+    sunLight.shadow.bias = -0.0005;
+    scene.add(sunLight);
+
+    // =========================================================
+    // 3. TEKSTUR CAT AIR PROSEDURAL (CanvasTexture)
+    // =========================================================
+    function createWatercolorTexture(baseColor, accents, repeat = 4) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = baseColor;
+      ctx.fillRect(0, 0, 512, 512);
+
+      for (let i = 0; i < 420; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const r = 12 + Math.random() * 44;
+        ctx.fillStyle = accents[i % accents.length];
+        ctx.beginPath();
+        ctx.ellipse(x, y, r, r * 0.65, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (let i = 0; i < 950; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(90, 68, 32, 0.08)' : 'rgba(255, 245, 210, 0.12)';
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(repeat, repeat);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createRiverTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      const grad = ctx.createLinearGradient(0, 0, 0, 256);
+      grad.addColorStop(0, '#72c5d4');
+      grad.addColorStop(0.22, '#53b2cb');
+      grad.addColorStop(0.5, '#46a3bf');
+      grad.addColorStop(0.78, '#53b2cb');
+      grad.addColorStop(1, '#72c5d4');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 512, 256);
+
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 46; i++) {
+        const x = Math.random() * 512;
+        const y = 26 + Math.random() * 204;
+        const w = 26 + Math.random() * 55;
+        ctx.strokeStyle = i % 3 === 0 ? 'rgba(255, 255, 255, 0.42)' : 'rgba(210, 246, 255, 0.28)';
+        ctx.lineWidth = 2 + Math.random() * 2.5;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.quadraticCurveTo(x + w * 0.5, y - 5, x + w, y);
+        ctx.stroke();
+      }
+
+      for (let i = 0; i < 36; i++) {
+        const x = Math.random() * 512;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.beginPath();
+        ctx.ellipse(x, 12 + Math.random() * 8, 12 + Math.random() * 14, 3.5, 0, 0, Math.PI * 2);
+        ctx.ellipse(x, 236 + Math.random() * 8, 12 + Math.random() * 14, 3.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.repeat.set(5, 1);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createSoilTexture(isWatered) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+
+      const base = isWatered ? '#7d5634' : '#b28751';
+      const furrow = isWatered ? '#634124' : '#966d3c';
+      const highlight = isWatered ? '#966a42' : '#c99f67';
+
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, 128, 128);
+
+      for (let y = 14; y < 120; y += 22) {
+        ctx.fillStyle = furrow;
+        ctx.fillRect(10, y, 108, 7);
+        ctx.fillStyle = highlight;
+        ctx.fillRect(10, y + 7, 108, 3);
+      }
+
+      for (let i = 0; i < 160; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(60,35,15,0.16)' : 'rgba(255,235,200,0.12)';
+        ctx.beginPath();
+        ctx.arc(Math.random() * 128, Math.random() * 128, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createWoodTexture(baseColor = '#b98856', grainColor = 'rgba(130, 82, 42, 0.25)') {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = baseColor;
+      ctx.fillRect(0, 0, 128, 128);
+      for (let i = 0; i < 24; i++) {
+        ctx.fillStyle = i % 2 === 0 ? grainColor : 'rgba(225, 185, 130, 0.18)';
+        ctx.fillRect(0, i * 6, 128, 3);
+      }
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createBlobShadowTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      const grad = ctx.createRadialGradient(32, 32, 4, 32, 32, 30);
+      grad.addColorStop(0, 'rgba(68, 45, 18, 0.42)');
+      grad.addColorStop(1, 'rgba(68, 45, 18, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    function createPlantSpriteTexture(type, stage) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 160;
+      canvas.height = 160;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = 'rgba(75, 50, 20, 0.22)';
+      ctx.beginPath();
+      ctx.ellipse(80, 142, 24, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (stage === 0) {
+        ctx.strokeStyle = '#558b3c';
+        ctx.lineWidth = 5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(80, 140);
+        ctx.lineTo(80, 112);
+        ctx.stroke();
+
+        ctx.fillStyle = '#7cb342';
+        ctx.beginPath();
+        ctx.ellipse(68, 114, 13, 7, -0.45, 0, Math.PI * 2);
+        ctx.ellipse(92, 114, 13, 7, 0.45, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (stage === 1) {
+        if (type === 'cabbage') {
+          ctx.fillStyle = '#5f9e3e';
+          for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.ellipse(80 + Math.cos(a) * 20, 118 + Math.sin(a) * 10, 20, 12, a * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.fillStyle = '#97cc68';
+          ctx.beginPath();
+          ctx.arc(80, 116, 15, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (type === 'carrot') {
+          ctx.strokeStyle = '#4e8a33';
+          ctx.lineWidth = 5;
+          ctx.lineCap = 'round';
+          [[-20, 88], [-7, 78], [7, 78], [20, 88]].forEach(([dx, y]) => {
+            ctx.beginPath();
+            ctx.moveTo(80, 134);
+            ctx.quadraticCurveTo(80 + dx * 0.5, 108, 80 + dx, y);
+            ctx.stroke();
+          });
+          ctx.fillStyle = '#f28c38';
+          ctx.beginPath();
+          ctx.ellipse(80, 136, 10, 6, 0, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.strokeStyle = '#4c8033';
+          ctx.lineWidth = 6;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(80, 140);
+          ctx.quadraticCurveTo(76, 108, 80, 82);
+          ctx.stroke();
+
+          ctx.fillStyle = '#689f38';
+          [[-18, 122, -0.4], [18, 122, 0.4], [-22, 102, -0.6], [22, 102, 0.6]].forEach(([dx, y, rot]) => {
+            ctx.beginPath();
+            ctx.ellipse(80 + dx, y, 18, 9, rot, 0, Math.PI * 2);
+            ctx.fill();
+          });
+
+          ctx.fillStyle = type === 'red' ? '#d94c4c' : '#fff8e1';
+          ctx.beginPath();
+          ctx.arc(80, 76, 12, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (stage === 2) {
+        if (type === 'cabbage') {
+          ctx.fillStyle = '#4d8f38';
+          for (let i = 0; i < 7; i++) {
+            const a = (i / 7) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.ellipse(80 + Math.cos(a) * 28, 114 + Math.sin(a) * 14, 24, 15, a * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.fillStyle = '#82c45a';
+          ctx.beginPath();
+          ctx.arc(80, 106, 28, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#a8de7c';
+          ctx.beginPath();
+          ctx.arc(76, 100, 20, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#d4f2b3';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(80, 105, 14, 0.4, 2.6);
+          ctx.stroke();
+        } else if (type === 'carrot') {
+          ctx.strokeStyle = '#4b8c32';
+          ctx.lineWidth = 6;
+          ctx.lineCap = 'round';
+          [[-28, 72], [-14, 58], [0, 52], [14, 58], [28, 72]].forEach(([dx, y]) => {
+            ctx.beginPath();
+            ctx.moveTo(80, 118);
+            ctx.quadraticCurveTo(80 + dx * 0.45, 90, 80 + dx, y);
+            ctx.stroke();
+          });
+          ctx.fillStyle = '#6db344';
+          [[-24, 76], [-10, 64], [10, 64], [24, 76]].forEach(([dx, y]) => {
+            ctx.beginPath();
+            ctx.ellipse(80 + dx, y, 12, 6, dx * 0.02, 0, Math.PI * 2);
+            ctx.fill();
+          });
+          ctx.fillStyle = '#f27824';
+          ctx.beginPath();
+          ctx.ellipse(80, 126, 20, 15, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffa347';
+          ctx.beginPath();
+          ctx.ellipse(75, 121, 9, 5, -0.3, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (type === 'red') {
+          ctx.strokeStyle = '#46782e';
+          ctx.lineWidth = 7;
+          ctx.beginPath();
+          ctx.moveTo(80, 140);
+          ctx.lineTo(80, 68);
+          ctx.stroke();
+
+          ctx.fillStyle = '#5f9937';
+          [[-24, 125, -0.35], [24, 125, 0.35], [-26, 102, -0.5], [26, 102, 0.5], [0, 132, 0]].forEach(([dx, y, rot]) => {
+            ctx.beginPath();
+            ctx.ellipse(80 + dx, y, 22, 10, rot, 0, Math.PI * 2);
+            ctx.fill();
+          });
+
+          const layers = [
+            { r: 30, color: '#b72828', count: 8 },
+            { r: 22, color: '#dc3d3d', count: 7 },
+            { r: 14, color: '#f2665e', count: 5 }
+          ];
+          layers.forEach((layer, idx) => {
+            ctx.fillStyle = layer.color;
+            for (let i = 0; i < layer.count; i++) {
+              const a = (i / layer.count) * Math.PI * 2 + idx * 0.4;
+              ctx.beginPath();
+              ctx.arc(80 + Math.cos(a) * (layer.r * 0.45), 60 + Math.sin(a) * (layer.r * 0.35), layer.r * 0.62, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          });
+          ctx.fillStyle = '#ff948a';
+          ctx.beginPath();
+          ctx.arc(80, 58, 7, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = '#5e9634';
+          for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.ellipse(80 + Math.cos(a) * 24, 124 + Math.sin(a) * 10, 22, 9, a * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          const daisies = [
+            { x: 56, y: 88, s: 0.85 },
+            { x: 104, y: 90, s: 0.85 },
+            { x: 80, y: 66, s: 1.05 }
+          ];
+          daisies.forEach(d => {
+            ctx.strokeStyle = '#538a30';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(80, 128);
+            ctx.lineTo(d.x, d.y);
+            ctx.stroke();
+
+            ctx.fillStyle = '#fffdf7';
+            for (let i = 0; i < 10; i++) {
+              const a = (i / 10) * Math.PI * 2;
+              ctx.save();
+              ctx.translate(d.x + Math.cos(a) * 14 * d.s, d.y + Math.sin(a) * 11 * d.s);
+              ctx.rotate(a);
+              ctx.beginPath();
+              ctx.ellipse(0, 0, 10 * d.s, 4.5 * d.s, 0, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            }
+            ctx.fillStyle = '#f5b82e';
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, 8 * d.s, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffe066';
+            ctx.beginPath();
+            ctx.arc(d.x - 2, d.y - 2, 3.5 * d.s, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createHeartTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ff7aa8';
+      ctx.strokeStyle = '#fff5f8';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(32, 52);
+      ctx.bezierCurveTo(10, 36, 8, 16, 20, 12);
+      ctx.bezierCurveTo(27, 10, 32, 18, 32, 20);
+      ctx.bezierCurveTo(32, 18, 37, 10, 44, 12);
+      ctx.bezierCurveTo(56, 16, 54, 36, 32, 52);
+      ctx.fill();
+      ctx.stroke();
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createZzzTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 96;
+      canvas.height = 96;
+      const ctx = canvas.getContext('2d');
+      ctx.font = 'bold 42px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = 'rgba(34, 46, 82, 0.85)';
+      ctx.strokeText('Zzz', 48, 48);
+      ctx.fillStyle = '#e8f1ff';
+      ctx.fillText('Zzz', 48, 48);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    const outerGrassTex = createWatercolorTexture('#96bf5c', [
+      'rgba(128, 174, 72, 0.2)', 'rgba(170, 206, 106, 0.18)', 'rgba(112, 152, 62, 0.14)'
+    ], 7);
+    const farmGroundTex = createWatercolorTexture('#ddb963', [
+      'rgba(235, 206, 128, 0.18)', 'rgba(196, 154, 72, 0.14)', 'rgba(218, 185, 98, 0.18)'
+    ], 3);
+    const pathTex = createWatercolorTexture('#d6b26a', [
+      'rgba(225, 195, 130, 0.25)', 'rgba(186, 146, 78, 0.18)'
+    ], 2);
+    const riverTex = createRiverTexture();
+
+    const soilDryTex = createSoilTexture(false);
+    const soilWetTex = createSoilTexture(true);
+    const woodTex = createWoodTexture('#b98856');
+    const darkWoodTex = createWoodTexture('#8a5c34', 'rgba(72, 42, 18, 0.3)');
+    const roofTex = createWoodTexture('#b85d3b', 'rgba(128, 52, 24, 0.28)');
+    const blobShadowTex = createBlobShadowTexture();
+    const heartTex = createHeartTexture();
+    const zzzTex = createZzzTexture();
+
+    const plantTextures = {
+      cabbage: [0, 1, 2].map(st => createPlantSpriteTexture('cabbage', st)),
+      carrot: [0, 1, 2].map(st => createPlantSpriteTexture('carrot', st)),
+      red: [0, 1, 2].map(st => createPlantSpriteTexture('red', st)),
+      white: [0, 1, 2].map(st => createPlantSpriteTexture('white', st))
+    };
+
+    function addBlobShadow(parent, radius = 0.55) {
+      const sh = new THREE.Mesh(
+        new THREE.PlaneGeometry(radius * 2, radius * 2),
+        new THREE.MeshBasicMaterial({ map: blobShadowTex, transparent: true, depthWrite: false })
+      );
+      sh.rotation.x = -Math.PI / 2;
+      sh.position.y = 0.028;
+      parent.add(sh);
+    }
+
+    // =========================================================
+    // 4. COLLIDER PAGAR / BANGUNAN & LINGKUNGAN DUNIA
+    // =========================================================
+    const obstacles = [];
+    function addObstacle(minX, maxX, minZ, maxZ) {
+      obstacles.push({ minX, maxX, minZ, maxZ });
+    }
+
+    const GARDEN = { minX: -6.2, maxX: 1.4, minZ: -4.6, maxZ: 3.0 };
+    const GATE_CENTER = { x: GARDEN.maxX, z: 0.15 };
+    const WORLD_LIMIT = { minX: -9.8, maxX: 10.2, minZ: -8.6, maxZ: 4.95 };
+
+    const outerGround = new THREE.Mesh(
+      new THREE.PlaneGeometry(75, 75),
+      new THREE.MeshStandardMaterial({ map: outerGrassTex, roughness: 0.96 })
+    );
+    outerGround.rotation.x = -Math.PI / 2;
+    outerGround.position.y = -0.02;
+    outerGround.receiveShadow = true;
+    scene.add(outerGround);
+
+    const farmGround = new THREE.Mesh(
+      new THREE.PlaneGeometry(GARDEN.maxX - GARDEN.minX + 0.3, GARDEN.maxZ - GARDEN.minZ + 0.3),
+      new THREE.MeshStandardMaterial({ map: farmGroundTex, roughness: 0.95 })
+    );
+    farmGround.rotation.x = -Math.PI / 2;
+    farmGround.position.set((GARDEN.minX + GARDEN.maxX) / 2, 0.005, (GARDEN.minZ + GARDEN.maxZ) / 2);
+    farmGround.receiveShadow = true;
+    scene.add(farmGround);
+
+    const pathMat = new THREE.MeshStandardMaterial({ map: pathTex, roughness: 0.96 });
+    const pathToPen = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 1.55), pathMat);
+    pathToPen.rotation.x = -Math.PI / 2;
+    pathToPen.position.set(3.2, 0.002, GATE_CENTER.z);
+    pathToPen.receiveShadow = true;
+    scene.add(pathToPen);
+
+    const pathToRiver = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 4.4), pathMat);
+    pathToRiver.rotation.x = -Math.PI / 2;
+    pathToRiver.position.set(2.85, 0.001, 2.55);
+    pathToRiver.receiveShadow = true;
+    scene.add(pathToRiver);
+
+    const pathNorth = new THREE.Mesh(new THREE.PlaneGeometry(1.45, 5.6), pathMat);
+    pathNorth.rotation.x = -Math.PI / 2;
+    pathNorth.position.set(2.85, 0.001, -2.5);
+    pathNorth.receiveShadow = true;
+    scene.add(pathNorth);
+
+    const pathToHouse = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 1.35), pathMat);
+    pathToHouse.rotation.x = -Math.PI / 2;
+    pathToHouse.position.set(1.2, 0.002, -5.25);
+    pathToHouse.receiveShadow = true;
+    scene.add(pathToHouse);
+
+    // =========================================================
+    // 5. PAGAR KAYU KEBUN + PINTU PAGAR TERBUKA
+    // =========================================================
+    const woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.85 });
+    const darkWoodMat = new THREE.MeshStandardMaterial({ map: darkWoodTex, roughness: 0.88 });
+    const ironMat = new THREE.MeshStandardMaterial({ color: 0x3b3530, roughness: 0.6, metalness: 0.4 });
+    const fenceGroup = new THREE.Group();
+
+    function addFenceSegment(x, z, rotY = 0, length = 1.25, material = woodMat) {
+      const seg = new THREE.Group();
+      const half = length / 2;
+
+      const postGeo = new THREE.BoxGeometry(0.18, 0.95, 0.18);
+      const p1 = new THREE.Mesh(postGeo, material);
+      p1.position.set(-half, 0.47, 0);
+      p1.castShadow = true;
+      p1.receiveShadow = true;
+
+      const p2 = new THREE.Mesh(postGeo, material);
+      p2.position.set(half, 0.47, 0);
+      p2.castShadow = true;
+      p2.receiveShadow = true;
+
+      const railGeo = new THREE.BoxGeometry(length + 0.08, 0.15, 0.08);
+      const r1 = new THREE.Mesh(railGeo, material);
+      r1.position.set(0, 0.68, 0);
+      r1.castShadow = true;
+
+      const r2 = new THREE.Mesh(railGeo, material);
+      r2.position.set(0, 0.32, 0);
+      r2.castShadow = true;
+
+      seg.add(p1, p2, r1, r2);
+      seg.position.set(x, 0, z);
+      seg.rotation.y = rotY;
+      fenceGroup.add(seg);
+    }
+
+    function buildGardenFenceWithOpenGate() {
+      const { minX, maxX, minZ, maxZ } = GARDEN;
+      const width = maxX - minX;
+      const depth = maxZ - minZ;
+
+      const segCountX = 6;
+      const segLenX = width / segCountX;
+      for (let i = 0; i < segCountX; i++) {
+        const x = minX + segLenX * (i + 0.5);
+        addFenceSegment(x, minZ, 0, segLenX);
+        addFenceSegment(x, maxZ, 0, segLenX);
+      }
+      addObstacle(minX - 0.15, maxX + 0.15, minZ - 0.2, minZ + 0.2);
+      addObstacle(minX - 0.15, maxX + 0.15, maxZ - 0.2, maxZ + 0.2);
+
+      const segCountZ = 6;
+      const segLenZ = depth / segCountZ;
+      for (let i = 0; i < segCountZ; i++) {
+        const z = minZ + segLenZ * (i + 0.5);
+        addFenceSegment(minX, z, Math.PI / 2, segLenZ);
+      }
+      addObstacle(minX - 0.2, minX + 0.2, minZ - 0.15, maxZ + 0.15);
+
+      const gateMinZ = -0.75;
+      const gateMaxZ = 1.05;
+
+      const topLen = gateMinZ - minZ;
+      for (let i = 0; i < 3; i++) {
+        const l = topLen / 3;
+        addFenceSegment(maxX, minZ + l * (i + 0.5), Math.PI / 2, l);
+      }
+      addObstacle(maxX - 0.2, maxX + 0.2, minZ - 0.15, gateMinZ + 0.05);
+
+      const botLen = maxZ - gateMaxZ;
+      for (let i = 0; i < 2; i++) {
+        const l = botLen / 2;
+        addFenceSegment(maxX, gateMaxZ + l * (i + 0.5), Math.PI / 2, l);
+      }
+      addObstacle(maxX - 0.2, maxX + 0.2, gateMaxZ - 0.05, maxZ + 0.15);
+
+      const cornerGeo = new THREE.BoxGeometry(0.24, 1.08, 0.24);
+      [[minX, minZ], [maxX, minZ], [minX, maxZ], [maxX, maxZ]].forEach(([cx, cz]) => {
+        const post = new THREE.Mesh(cornerGeo, woodMat);
+        post.position.set(cx, 0.54, cz);
+        post.castShadow = true;
+        fenceGroup.add(post);
+      });
+
+      const gatePostGeo = new THREE.BoxGeometry(0.26, 1.24, 0.26);
+      const gpTop = new THREE.Mesh(gatePostGeo, darkWoodMat);
+      gpTop.position.set(maxX, 0.62, gateMinZ);
+      gpTop.castShadow = true;
+      const gpBot = new THREE.Mesh(gatePostGeo, darkWoodMat);
+      gpBot.position.set(maxX, 0.62, gateMaxZ);
+      gpBot.castShadow = true;
+      fenceGroup.add(gpTop, gpBot);
+
+      const doorPivot = new THREE.Group();
+      doorPivot.position.set(maxX + 0.05, 0, gateMaxZ - 0.05);
+
+      const doorW = 1.55;
+      const railTop = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, doorW), woodMat);
+      railTop.position.set(0, 0.78, -doorW / 2);
+      railTop.castShadow = true;
+
+      const railBot = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, doorW), woodMat);
+      railBot.position.set(0, 0.28, -doorW / 2);
+      railBot.castShadow = true;
+
+      const brace = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.11, doorW * 0.98), darkWoodMat);
+      brace.position.set(0.02, 0.53, -doorW / 2);
+      brace.rotation.x = 0.34;
+      brace.castShadow = true;
+
+      for (let i = 0; i < 4; i++) {
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.84, 0.15), woodMat);
+        slat.position.set(0, 0.53, -0.22 - i * 0.36);
+        slat.castShadow = true;
+        doorPivot.add(slat);
+      }
+
+      const hinge1 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.22), ironMat);
+      hinge1.position.set(0, 0.78, -0.06);
+      const hinge2 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.22), ironMat);
+      hinge2.position.set(0, 0.28, -0.06);
+
+      doorPivot.add(railTop, railBot, brace, hinge1, hinge2);
+      doorPivot.rotation.y = -1.95;
+      fenceGroup.add(doorPivot);
+    }
+    buildGardenFenceWithOpenGate();
+    scene.add(fenceGroup);
+
+    // =========================================================
+    // 6. KANDANG TERNAK (BARN KAYU + PAGAR + JERAMI)
+    // =========================================================
+    const PEN = { minX: 4.2, maxX: 9.2, minZ: -4.2, maxZ: 2.2 };
+
+    function buildSheepBarnAndPen() {
+      const penGroup = new THREE.Group();
+
+      const penFloor = new THREE.Mesh(
+        new THREE.PlaneGeometry(PEN.maxX - PEN.minX + 0.2, PEN.maxZ - PEN.minZ + 0.2),
+        new THREE.MeshStandardMaterial({ map: pathTex, roughness: 0.96 })
+      );
+      penFloor.rotation.x = -Math.PI / 2;
+      penFloor.position.set((PEN.minX + PEN.maxX) / 2, 0.003, (PEN.minZ + PEN.maxZ) / 2);
+      penFloor.receiveShadow = true;
+      penGroup.add(penFloor);
+
+      const { minX, maxX, minZ, maxZ } = PEN;
+      const lenX = (maxX - minX) / 4;
+      for (let i = 0; i < 4; i++) {
+        const x = minX + lenX * (i + 0.5);
+        addFenceSegment(x, minZ, 0, lenX, darkWoodMat);
+        addFenceSegment(x, maxZ, 0, lenX, darkWoodMat);
+      }
+      addObstacle(minX - 0.15, maxX + 0.15, minZ - 0.2, minZ + 0.2);
+      addObstacle(minX - 0.15, maxX + 0.15, maxZ - 0.2, maxZ + 0.2);
+
+      const lenZ = (maxZ - minZ) / 5;
+      for (let i = 0; i < 5; i++) {
+        addFenceSegment(maxX, minZ + lenZ * (i + 0.5), Math.PI / 2, lenZ, darkWoodMat);
+      }
+      addObstacle(maxX - 0.2, maxX + 0.2, minZ - 0.15, maxZ + 0.15);
+
+      const penGateMinZ = -0.65;
+      const penGateMaxZ = 1.05;
+      const pTopLen = penGateMinZ - minZ;
+      for (let i = 0; i < 3; i++) {
+        const l = pTopLen / 3;
+        addFenceSegment(minX, minZ + l * (i + 0.5), Math.PI / 2, l, darkWoodMat);
+      }
+      addObstacle(minX - 0.2, minX + 0.2, minZ - 0.15, penGateMinZ + 0.05);
+
+      const pBotLen = maxZ - penGateMaxZ;
+      addFenceSegment(minX, penGateMaxZ + pBotLen / 2, Math.PI / 2, pBotLen, darkWoodMat);
+      addObstacle(minX - 0.2, minX + 0.2, penGateMaxZ - 0.05, maxZ + 0.15);
+
+      const barn = new THREE.Group();
+      const bx = 6.75;
+      const bz = -2.95;
+      barn.position.set(bx, 0, bz);
+
+      const roofMat = new THREE.MeshStandardMaterial({ map: roofTex, roughness: 0.85 });
+      const wallMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.9 });
+
+      const backWall = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.85, 0.16), wallMat);
+      backWall.position.set(0, 0.92, -0.95);
+      backWall.castShadow = true;
+      backWall.receiveShadow = true;
+
+      const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.85, 2.0), wallMat);
+      leftWall.position.set(-1.62, 0.92, 0);
+      leftWall.castShadow = true;
+
+      const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.85, 2.0), wallMat);
+      rightWall.position.set(1.62, 0.92, 0);
+      rightWall.castShadow = true;
+
+      const pillarGeo = new THREE.BoxGeometry(0.18, 1.9, 0.18);
+      const pilL = new THREE.Mesh(pillarGeo, darkWoodMat);
+      pilL.position.set(-1.6, 0.95, 0.92);
+      pilL.castShadow = true;
+      const pilR = new THREE.Mesh(pillarGeo, darkWoodMat);
+      pilR.position.set(1.6, 0.95, 0.92);
+      pilR.castShadow = true;
+
+      const roofSlopeL = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.14, 1.55), roofMat);
+      roofSlopeL.position.set(0, 2.18, -0.58);
+      roofSlopeL.rotation.x = -0.42;
+      roofSlopeL.castShadow = true;
+
+      const roofSlopeR = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.14, 1.55), roofMat);
+      roofSlopeR.position.set(0, 2.18, 0.58);
+      roofSlopeR.rotation.x = 0.42;
+      roofSlopeR.castShadow = true;
+
+      const signBoard = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.36, 0.08), darkWoodMat);
+      signBoard.position.set(0, 1.88, 1.0);
+      signBoard.castShadow = true;
+
+      barn.add(backWall, leftWall, rightWall, pilL, pilR, roofSlopeL, roofSlopeR, signBoard);
+      penGroup.add(barn);
+      addObstacle(bx - 1.8, bx + 1.8, bz - 1.15, bz + 1.05);
+
+      const hayMat = new THREE.MeshStandardMaterial({ color: 0xe6be53, roughness: 0.95 });
+      const twineMat = new THREE.MeshStandardMaterial({ color: 0x9c6632, roughness: 0.9 });
+
+      function addHayBale(hx, hy, hz, rotY = 0) {
+        const bale = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.44, 0.52), hayMat);
+        body.castShadow = true;
+        body.receiveShadow = true;
+        const t1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.46, 0.54), twineMat);
+        t1.position.x = -0.18;
+        const t2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.46, 0.54), twineMat);
+        t2.position.x = 0.18;
+        bale.add(body, t1, t2);
+        bale.position.set(hx, hy, hz);
+        bale.rotation.y = rotY;
+        penGroup.add(bale);
+      }
+
+      addHayBale(8.25, 0.22, -1.2, 0.2);
+      addHayBale(8.35, 0.22, -0.55, -0.15);
+      addHayBale(8.3, 0.65, -0.88, 0.08);
+      addObstacle(7.8, 8.85, -1.55, -0.2);
+
+      const trough = new THREE.Group();
+      const troughBase = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.34, 0.52), darkWoodMat);
+      troughBase.position.y = 0.17;
+      troughBase.castShadow = true;
+      const troughWater = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.12, 0.36),
+        new THREE.MeshBasicMaterial({ color: 0x62bfd4 })
+      );
+      troughWater.rotation.x = -Math.PI / 2;
+      troughWater.position.y = 0.35;
+      trough.add(troughBase, troughWater);
+      trough.position.set(5.45, 0, 1.45);
+      penGroup.add(trough);
+      addObstacle(4.7, 6.2, 1.1, 1.8);
+
+      scene.add(penGroup);
+    }
+    buildSheepBarnAndPen();
+
+    // =========================================================
+    // 6B. RUMAH PETANI & PETI PENYIMPANAN
+    // =========================================================
+    const HOUSE = { x: -0.35, z: -7.0 };
+    const HOUSE_DOOR = { x: -0.35, z: -5.2 };
+    const clickableHouse = [];
+    const windowGlowMaterials = [];
+    const chimneySmoke = [];
+    let porchLight = null;
+    let lanternMat = null;
+
+    function buildFarmerHouse() {
+      const hGroup = new THREE.Group();
+      hGroup.position.set(HOUSE.x, 0, HOUSE.z);
+
+      const plasterMat = new THREE.MeshStandardMaterial({ color: 0xf7ecd8, roughness: 0.92 });
+      const stoneMat = new THREE.MeshStandardMaterial({ color: 0x999286, roughness: 0.95 });
+      const houseRoofMat = new THREE.MeshStandardMaterial({ map: roofTex, roughness: 0.82 });
+      const doorMat = new THREE.MeshStandardMaterial({ map: darkWoodTex, roughness: 0.85 });
+
+      const foundation = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.28, 2.8), stoneMat);
+      foundation.position.y = 0.14;
+      foundation.receiveShadow = true;
+      hGroup.add(foundation);
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(3.55, 2.05, 2.55), plasterMat);
+      body.position.y = 1.3;
+      body.castShadow = true;
+      body.receiveShadow = true;
+      hGroup.add(body);
+
+      const beamGeo = new THREE.BoxGeometry(0.16, 2.08, 0.16);
+      [[-1.75, -1.25], [1.75, -1.25], [-1.75, 1.25], [1.75, 1.25]].forEach(([bx, bz]) => {
+        const beam = new THREE.Mesh(beamGeo, darkWoodMat);
+        beam.position.set(bx, 1.3, bz);
+        beam.castShadow = true;
+        hGroup.add(beam);
+      });
+
+      const roofL = new THREE.Mesh(new THREE.BoxGeometry(4.25, 0.18, 1.95), houseRoofMat);
+      roofL.position.set(0, 2.82, -0.78);
+      roofL.rotation.x = -0.52;
+      roofL.castShadow = true;
+
+      const roofR = new THREE.Mesh(new THREE.BoxGeometry(4.25, 0.18, 1.95), houseRoofMat);
+      roofR.position.set(0, 2.82, 0.78);
+      roofR.rotation.x = 0.52;
+      roofR.castShadow = true;
+
+      const ridge = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.2, 0.22), darkWoodMat);
+      ridge.position.set(0, 3.3, 0);
+      ridge.castShadow = true;
+      hGroup.add(roofL, roofR, ridge);
+
+      const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.35, 0.5), stoneMat);
+      chimney.position.set(1.15, 3.35, -0.45);
+      chimney.castShadow = true;
+      hGroup.add(chimney);
+
+      const porch = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.2, 0.9), woodMat);
+      porch.position.set(0, 0.12, 1.65);
+      porch.receiveShadow = true;
+      porch.castShadow = true;
+      hGroup.add(porch);
+
+      const porchRoof = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.1, 0.95), houseRoofMat);
+      porchRoof.position.set(0, 2.05, 1.68);
+      porchRoof.rotation.x = 0.24;
+      porchRoof.castShadow = true;
+      hGroup.add(porchRoof);
+
+      const pColGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.85, 7);
+      [-0.78, 0.78].forEach(px => {
+        const col = new THREE.Mesh(pColGeo, darkWoodMat);
+        col.position.set(px, 1.1, 2.02);
+        col.castShadow = true;
+        hGroup.add(col);
+      });
+
+      const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(0.92, 1.48, 0.12), darkWoodMat);
+      doorFrame.position.set(0, 1.0, 1.26);
+      const doorLeaf = new THREE.Mesh(new THREE.BoxGeometry(0.76, 1.38, 0.14), doorMat);
+      doorLeaf.position.set(0, 0.98, 1.28);
+      const knob = new THREE.Mesh(
+        new THREE.SphereGeometry(0.05, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0xf0c259, metalness: 0.5, roughness: 0.3 })
+      );
+      knob.position.set(0.24, 0.96, 1.37);
+      hGroup.add(doorFrame, doorLeaf, knob);
+
+      function addWindow(wx, wy, wz, rotY = 0) {
+        const wGroup = new THREE.Group();
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.72, 0.1), darkWoodMat);
+        const glassMat = new THREE.MeshStandardMaterial({
+          color: 0xaad4e6,
+          emissive: 0xffb84d,
+          emissiveIntensity: 0.0,
+          roughness: 0.3
+        });
+        windowGlowMaterials.push(glassMat);
+        const glass = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.56, 0.12), glassMat);
+        const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.58, 0.14), darkWoodMat);
+        const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.05, 0.14), darkWoodMat);
+        wGroup.add(frame, glass, crossV, crossH);
+        wGroup.position.set(wx, wy, wz);
+        wGroup.rotation.y = rotY;
+        hGroup.add(wGroup);
+      }
+
+      addWindow(-1.12, 1.35, 1.26, 0);
+      addWindow(1.12, 1.35, 1.26, 0);
+      addWindow(1.78, 1.35, 0.1, Math.PI / 2);
+
+      lanternMat = new THREE.MeshStandardMaterial({
+        color: 0xfff3c4,
+        emissive: 0xffb84d,
+        emissiveIntensity: 0.0
+      });
+      const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.24, 0.18), lanternMat);
+      lantern.position.set(0.68, 1.65, 1.98);
+      hGroup.add(lantern);
+
+      porchLight = new THREE.PointLight(0xffbe66, 0, 10, 1.6);
+      porchLight.position.set(HOUSE.x + 0.68, 1.75, HOUSE.z + 2.25);
+      scene.add(porchLight);
+
+      const houseHit = new THREE.Mesh(
+        new THREE.BoxGeometry(4.2, 3.5, 3.6),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      houseHit.position.set(0, 1.6, 0.35);
+      houseHit.userData = { type: 'house' };
+      hGroup.add(houseHit);
+      clickableHouse.push(houseHit);
+
+      scene.add(hGroup);
+      addObstacle(HOUSE.x - 1.95, HOUSE.x + 1.95, HOUSE.z - 1.45, HOUSE.z + 1.55);
+
+      const chestGroup = new THREE.Group();
+      chestGroup.position.set(HOUSE.x + 2.35, 0, HOUSE.z + 1.25);
+      const chestBase = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.62, 0.65), woodMat);
+      chestBase.position.y = 0.31;
+      chestBase.castShadow = true;
+      chestBase.receiveShadow = true;
+      const chestLid = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.14, 0.72), darkWoodMat);
+      chestLid.position.y = 0.66;
+      chestLid.castShadow = true;
+      const chestLatch = new THREE.Mesh(
+        new THREE.BoxGeometry(0.14, 0.16, 0.08),
+        new THREE.MeshStandardMaterial({ color: 0xf0c259, metalness: 0.5, roughness: 0.3 })
+      );
+      chestLatch.position.set(0, 0.58, 0.35);
+      const chestHit = new THREE.Mesh(
+        new THREE.BoxGeometry(1.25, 1.0, 1.0),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      chestHit.position.y = 0.45;
+      chestHit.userData = { type: 'storage' };
+      chestGroup.add(chestBase, chestLid, chestLatch, chestHit);
+      scene.add(chestGroup);
+      clickableHouse.push(chestHit);
+      addObstacle(HOUSE.x + 1.8, HOUSE.x + 2.9, HOUSE.z + 0.85, HOUSE.z + 1.65);
+
+      const smokeGeo = new THREE.SphereGeometry(0.14, 7, 7);
+      for (let i = 0; i < 6; i++) {
+        const smMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 });
+        const sm = new THREE.Mesh(smokeGeo, smMat);
+        sm.position.set(HOUSE.x + 1.15, 4.1 + i * 0.45, HOUSE.z - 0.45);
+        scene.add(sm);
+        chimneySmoke.push({ mesh: sm, age: i / 6 });
+      }
+    }
+    buildFarmerHouse();
+
+    // =========================================================
+    // 7. SUNGAI MENGALIR DI DEPAN / SELATAN KEBUN
+    // =========================================================
+    const riverMeshes = [];
+    const clickableRiver = [];
+
+    function buildRiver() {
+      const riverGroup = new THREE.Group();
+      const riverZ = 6.75;
+
+      const bankMat = new THREE.MeshStandardMaterial({ color: 0xd9c28b, roughness: 0.96 });
+      const bank = new THREE.Mesh(new THREE.PlaneGeometry(46, 4.1), bankMat);
+      bank.rotation.x = -Math.PI / 2;
+      bank.position.set(0, -0.008, riverZ);
+      bank.receiveShadow = true;
+      riverGroup.add(bank);
+
+      const waterMat = new THREE.MeshStandardMaterial({
+        map: riverTex,
+        roughness: 0.22,
+        metalness: 0.08,
+        transparent: true,
+        opacity: 0.92
+      });
+      const water = new THREE.Mesh(new THREE.PlaneGeometry(46, 3.05), waterMat);
+      water.rotation.x = -Math.PI / 2;
+      water.position.set(0, 0.008, riverZ);
+      water.receiveShadow = true;
+      water.userData = { type: 'river' };
+      clickableRiver.push(water);
+      riverGroup.add(water);
+
+      const dockGroup = new THREE.Group();
+      dockGroup.position.set(2.85, 0, 5.18);
+      for (let i = 0; i < 4; i++) {
+        const plank = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 0.3), woodMat);
+        plank.position.set(0, 0.12, i * 0.34);
+        plank.castShadow = true;
+        plank.receiveShadow = true;
+        dockGroup.add(plank);
+      }
+      const dPostGeo = new THREE.CylinderGeometry(0.08, 0.09, 0.55, 7);
+      [[-0.65, 0.08], [0.65, 0.08], [-0.65, 1.0], [0.65, 1.0]].forEach(([px, pz]) => {
+        const p = new THREE.Mesh(dPostGeo, darkWoodMat);
+        p.position.set(px, 0.16, pz);
+        p.castShadow = true;
+        dockGroup.add(p);
+      });
+      riverGroup.add(dockGroup);
+
+      const rockMat = new THREE.MeshStandardMaterial({ color: 0x9b9588, roughness: 0.92 });
+      const rockCoords = [
+        [-7.2, 5.15, 0.38], [-4.5, 5.25, 0.32], [-1.2, 5.1, 0.28], [0.8, 5.2, 0.34],
+        [5.2, 5.18, 0.42], [7.8, 5.25, 0.3], [9.6, 5.15, 0.36],
+        [-5.8, 8.3, 0.42], [0.2, 8.35, 0.36], [6.4, 8.28, 0.4]
+      ];
+      rockCoords.forEach(([rx, rz, rs]) => {
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(rs, 0), rockMat);
+        rock.scale.set(1.2, 0.65, 1.0);
+        rock.position.set(rx, rs * 0.3, rz);
+        rock.rotation.y = Math.random() * Math.PI;
+        rock.castShadow = true;
+        rock.receiveShadow = true;
+        riverGroup.add(rock);
+      });
+
+      const lilyMat = new THREE.MeshStandardMaterial({ color: 0x5da346, roughness: 0.8 });
+      const lotusMat = new THREE.MeshStandardMaterial({ color: 0xffb3c6, roughness: 0.7 });
+      [[-4.0, 6.4], [-3.4, 6.85], [0.2, 7.1], [6.2, 6.35], [6.8, 6.75]].forEach(([lx, lz], i) => {
+        const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.03, 12, 1, false, 0, Math.PI * 1.8), lilyMat);
+        pad.position.set(lx, 0.03, lz);
+        pad.rotation.y = i * 1.4;
+        riverGroup.add(pad);
+        riverMeshes.push({ mesh: pad, baseY: 0.03, phase: i * 1.3 });
+
+        if (i % 2 === 0) {
+          const flower = new THREE.Mesh(new THREE.DodecahedronGeometry(0.11, 0), lotusMat);
+          flower.position.set(lx, 0.09, lz);
+          riverGroup.add(flower);
+          riverMeshes.push({ mesh: flower, baseY: 0.09, phase: i * 1.3 });
+        }
+      });
+
+      const reedMat = new THREE.MeshStandardMaterial({ color: 0x679c3f, roughness: 0.9 });
+      [[-6.4, 5.1], [-2.8, 5.15], [4.5, 5.12], [8.5, 5.18], [-3.2, 8.4], [3.5, 8.45]].forEach(([gx, gz]) => {
+        for (let b = 0; b < 4; b++) {
+          const blade = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.65 + Math.random() * 0.25, 4), reedMat);
+          blade.position.set(gx + (b - 1.5) * 0.11, 0.32, gz + (Math.random() - 0.5) * 0.15);
+          blade.rotation.z = (b - 1.5) * 0.14;
+          riverGroup.add(blade);
+        }
+      });
+
+      scene.add(riverGroup);
+    }
+    buildRiver();
+
+    // =========================================================
+    // 8. PEPOHONAN RINDANG DI LUAR PAGAR & SEBERANG SUNGAI
+    // =========================================================
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x875c36, roughness: 0.92 });
+    const treeMeshes = [];
+
+    function createTree(x, z, scale = 1, variant = 'green') {
+      const tree = new THREE.Group();
+      addBlobShadow(tree, 1.15 * scale);
+
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18 * scale, 0.28 * scale, 1.45 * scale, 7),
+        trunkMat
+      );
+      trunk.position.y = 0.72 * scale;
+      trunk.castShadow = true;
+      trunk.receiveShadow = true;
+      tree.add(trunk);
+
+      const palettes = {
+        green: [0x6da143, 0x7eb34f, 0x5c8f36],
+        lime: [0x89ba54, 0x99c961, 0x73a341],
+        blossom: [0xf4a8be, 0xf9bfd0, 0xe88ca8]
+      };
+      const cols = palettes[variant] || palettes.green;
+
+      const crownOffsets = [
+        [0, 1.95, 0, 0.95],
+        [-0.55, 1.65, 0.35, 0.68],
+        [0.52, 1.7, -0.3, 0.72],
+        [0.2, 2.38, 0.22, 0.62],
+        [-0.3, 1.72, -0.45, 0.62]
+      ];
+
+      crownOffsets.forEach(([ox, oy, oz, r], idx) => {
+        const leafMat = new THREE.MeshStandardMaterial({
+          color: cols[idx % cols.length],
+          roughness: 0.88
+        });
+        const puff = new THREE.Mesh(new THREE.DodecahedronGeometry(r * scale, 1), leafMat);
+        puff.position.set(ox * scale, oy * scale, oz * scale);
+        puff.castShadow = true;
+        puff.receiveShadow = true;
+        tree.add(puff);
+      });
+
+      tree.position.set(x, 0, z);
+      scene.add(tree);
+      treeMeshes.push({ group: tree, phase: Math.random() * Math.PI * 2 });
+      addObstacle(x - 0.45 * scale, x + 0.45 * scale, z - 0.45 * scale, z + 0.45 * scale);
+    }
+
+    const treePlacements = [
+      [-8.5, -7.2, 1.18, 'green'],
+      [-5.4, -7.8, 1.05, 'blossom'],
+      [-3.5, -8.5, 1.15, 'lime'],
+      [2.8, -8.3, 1.08, 'green'],
+      [5.8, -7.2, 1.15, 'blossom'],
+      [9.2, -6.6, 1.12, 'green'],
+      [-8.6, -3.2, 1.12, 'lime'],
+      [-8.8, 0.4, 1.2, 'green'],
+      [-8.4, 3.6, 1.0, 'blossom'],
+      [11.2, -2.5, 1.14, 'green'],
+      [11.4, 1.2, 1.05, 'lime'],
+      [10.8, 4.2, 0.96, 'blossom'],
+      [-6.8, 9.8, 1.05, 'green'],
+      [-2.0, 10.2, 0.95, 'blossom'],
+      [3.8, 10.0, 1.08, 'lime'],
+      [8.6, 9.7, 1.0, 'green']
+    ];
+    treePlacements.forEach(([tx, tz, sc, v]) => createTree(tx, tz, sc, v));
+
+    // =========================================================
+    // 9. GRID PETAK LAHAN INTERAKTIF (5x5)
+    // =========================================================
+    const tiles = [];
+    const tileMeshes = [];
+    const GRID_COLS = 5;
+    const GRID_ROWS = 5;
+    const TILE_SIZE = 1.14;
+    const TILE_GAP = 0.14;
+    const STEP = TILE_SIZE + TILE_GAP;
+    const OFFSET_X = -5.0;
+    const OFFSET_Z = -3.4;
+
+    const tileGeo = new THREE.BoxGeometry(TILE_SIZE, 0.09, TILE_SIZE);
+
+    function createTile(col, row) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0xd9b562,
+        roughness: 0.95,
+        transparent: true,
+        opacity: 0.35
+      });
+
+      const mesh = new THREE.Mesh(tileGeo, mat);
+      const wx = OFFSET_X + col * STEP;
+      const wz = OFFSET_Z + row * STEP;
+      mesh.position.set(wx, 0.02, wz);
+      mesh.receiveShadow = true;
+
+      const tileData = {
+        col, row, wx, wz,
+        state: 'empty',
+        watered: false,
+        cropType: null,
+        wateredDays: 0,
+        stage: 0,
+        mesh,
+        plantSprite: null,
+        popScale: 1
+      };
+
+      mesh.userData = { type: 'tile', tile: tileData };
+      scene.add(mesh);
+      tiles.push(tileData);
+      tileMeshes.push(mesh);
+      return tileData;
+    }
+
+    function computeCropStage(tile) {
+      if (!tile.cropType || !CROPS[tile.cropType]) return 0;
+      const needed = CROPS[tile.cropType].daysToGrow;
+      if (tile.wateredDays >= needed) return 2;
+      if (tile.wateredDays >= Math.ceil(needed / 2)) return 1;
+      return 0;
+    }
+
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        createTile(c, r);
+      }
+    }
+
+    function refreshTileVisual(tile) {
+      const mat = tile.mesh.material;
+      if (tile.state === 'empty') {
+        mat.map = null;
+        mat.color.setHex(0xd4ad58);
+        mat.opacity = 0.28;
+        tile.mesh.position.y = 0.015;
+      } else {
+        mat.map = tile.watered ? soilWetTex : soilDryTex;
+        mat.color.setHex(0xffffff);
+        mat.opacity = 1;
+        tile.mesh.position.y = 0.045;
+      }
+      mat.needsUpdate = true;
+
+      if (tile.state === 'planted' && tile.cropType) {
+        const tex = plantTextures[tile.cropType][tile.stage];
+        if (!tile.plantSprite) {
+          const spMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+          const sp = new THREE.Sprite(spMat);
+          sp.position.set(tile.wx, 0.65, tile.wz);
+          sp.scale.set(1.25, 1.25, 1);
+          scene.add(sp);
+          tile.plantSprite = sp;
+        } else {
+          tile.plantSprite.material.map = tex;
+          tile.plantSprite.material.needsUpdate = true;
+        }
+        tile.popScale = 0.35;
+      } else if (tile.plantSprite) {
+        scene.remove(tile.plantSprite);
+        tile.plantSprite.material.dispose();
+        tile.plantSprite = null;
+      }
+    }
+
+    function seedInitialFarm() {
+      const preset = [
+        [1, 1, 'red', 5],
+        [3, 1, 'white', 4]
+      ];
+      preset.forEach(([c, r, type, wDays]) => {
+        const t = tiles[r * GRID_COLS + c];
+        t.state = 'planted';
+        t.cropType = type;
+        t.wateredDays = wDays;
+        t.stage = computeCropStage(t);
+        t.watered = false;
+        refreshTileVisual(t);
+      });
+    }
+    seedInitialFarm();
+
+    const hoverBox = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE_SIZE + 0.05, 0.14, TILE_SIZE + 0.05)),
+      new THREE.LineBasicMaterial({ color: 0xfff8e1 })
+    );
+    hoverBox.visible = false;
+    scene.add(hoverBox);
+
+    const activeTileBox = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE_SIZE + 0.08, 0.16, TILE_SIZE + 0.08)),
+      new THREE.LineBasicMaterial({ color: 0xffe066 })
+    );
+    activeTileBox.visible = false;
+    scene.add(activeTileBox);
+
+    const targetRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.22, 0.34, 24),
+      new THREE.MeshBasicMaterial({ color: 0xfff6d1, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
+    );
+    targetRing.rotation.x = -Math.PI / 2;
+    targetRing.position.y = 0.08;
+    targetRing.visible = false;
+    scene.add(targetRing);
+
+    // =========================================================
+    // 10. KARAKTER PETANI
+    // =========================================================
+    const farmer = {
+      group: new THREE.Group(),
+      leftLeg: null,
+      rightLeg: null,
+      leftArm: null,
+      rightArm: null,
+      rodMesh: null,
+      x: 0.55,
+      z: 0.25,
+      radius: 0.3,
+      speed: 4.3,
+      walkPhase: 0,
+      actionAnim: 0,
+      waypoints: [],
+      pendingAction: null
+    };
+
+    function buildFarmer() {
+      const g = farmer.group;
+      addBlobShadow(g, 0.5);
+
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xfad3b0, roughness: 0.85 });
+      const hairMat = new THREE.MeshStandardMaterial({ color: 0x452d1d, roughness: 0.9 });
+      const hatMat = new THREE.MeshStandardMaterial({ color: 0xe8c468, roughness: 0.9 });
+      const ribbonMat = new THREE.MeshStandardMaterial({ color: 0xd64b4b, roughness: 0.8 });
+      const shirtMat = new THREE.MeshStandardMaterial({ color: 0xe68a39, roughness: 0.85 });
+      const pantsMat = new THREE.MeshStandardMaterial({ color: 0x5c7c48, roughness: 0.9 });
+      const bagMat = new THREE.MeshStandardMaterial({ color: 0xc94238, roughness: 0.85 });
+
+      const legGeo = new THREE.CylinderGeometry(0.08, 0.075, 0.36, 8);
+      farmer.leftLeg = new THREE.Mesh(legGeo, pantsMat);
+      farmer.leftLeg.position.set(-0.12, 0.2, 0);
+      farmer.leftLeg.castShadow = true;
+
+      farmer.rightLeg = new THREE.Mesh(legGeo, pantsMat);
+      farmer.rightLeg.position.set(0.12, 0.2, 0);
+      farmer.rightLeg.castShadow = true;
+
+      const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.5, 10), shirtMat);
+      torso.position.y = 0.6;
+      torso.castShadow = true;
+
+      const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.3, 0.18), bagMat);
+      backpack.position.set(0, 0.62, -0.22);
+      backpack.castShadow = true;
+
+      const armGeo = new THREE.CylinderGeometry(0.065, 0.06, 0.36, 8);
+      farmer.leftArm = new THREE.Mesh(armGeo, shirtMat);
+      farmer.leftArm.position.set(-0.27, 0.64, 0);
+      farmer.leftArm.rotation.z = 0.22;
+      farmer.leftArm.castShadow = true;
+
+      farmer.rightArm = new THREE.Mesh(armGeo, shirtMat);
+      farmer.rightArm.position.set(0.27, 0.64, 0);
+      farmer.rightArm.rotation.z = -0.22;
+      farmer.rightArm.castShadow = true;
+
+      const rodGroup = new THREE.Group();
+      const rodPole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.015, 0.03, 1.45, 6),
+        new THREE.MeshStandardMaterial({ color: 0x8f5b2d, roughness: 0.7 })
+      );
+      rodPole.position.set(0, -0.05, 0.65);
+      rodPole.rotation.x = Math.PI * 0.38;
+      rodPole.castShadow = true;
+      const rodReel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, 0.06, 8),
+        new THREE.MeshStandardMaterial({ color: 0xd9b35a, metalness: 0.4, roughness: 0.3 })
+      );
+      rodReel.position.set(0.03, -0.18, 0.22);
+      rodReel.rotation.z = Math.PI / 2;
+      rodGroup.add(rodPole, rodReel);
+      rodGroup.visible = false;
+      farmer.rightArm.add(rodGroup);
+      farmer.rodMesh = rodGroup;
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 12), skinMat);
+      head.position.y = 1.06;
+      head.castShadow = true;
+
+      const hair = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), hairMat);
+      hair.position.set(0, 1.08, -0.02);
+
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x2b1d14 });
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.028, 6, 6), eyeMat);
+      eyeL.position.set(-0.08, 1.07, 0.22);
+      const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.028, 6, 6), eyeMat);
+      eyeR.position.set(0.08, 1.07, 0.22);
+
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.44, 0.05, 14), hatMat);
+      brim.position.y = 1.24;
+      brim.castShadow = true;
+
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.18, 12), hatMat);
+      crown.position.y = 1.33;
+      crown.castShadow = true;
+
+      const ribbon = new THREE.Mesh(new THREE.CylinderGeometry(0.255, 0.265, 0.05, 12), ribbonMat);
+      ribbon.position.y = 1.27;
+
+      g.add(
+        farmer.leftLeg, farmer.rightLeg, torso, backpack,
+        farmer.leftArm, farmer.rightArm,
+        head, hair, eyeL, eyeR, brim, crown, ribbon
+      );
+      g.position.set(farmer.x, 0, farmer.z);
+      scene.add(g);
+    }
+    buildFarmer();
+
+    function isInsideGarden(x, z) {
+      return x > GARDEN.minX && x < GARDEN.maxX && z > GARDEN.minZ && z < GARDEN.maxZ;
+    }
+
+    function isInsidePen(x, z) {
+      return x > PEN.minX && x < PEN.maxX && z > PEN.minZ && z < PEN.maxZ;
+    }
+
+    function setFarmerRoute(destX, destZ, pendingAction = null) {
+      const pts = [];
+      const startInGarden = isInsideGarden(farmer.x, farmer.z);
+      const destInGarden = isInsideGarden(destX, destZ);
+      const startInPen = isInsidePen(farmer.x, farmer.z);
+      const destInPen = isInsidePen(destX, destZ);
+
+      if (startInGarden && !destInGarden) {
+        pts.push({ x: GATE_CENTER.x - 0.35, z: GATE_CENTER.z });
+        pts.push({ x: GATE_CENTER.x + 0.75, z: GATE_CENTER.z });
+        if (destZ < GARDEN.minZ) {
+          pts.push({ x: 2.85, z: -5.2 });
+        }
+      } else if (!startInGarden && destInGarden) {
+        if (startInPen) {
+          pts.push({ x: PEN.minX + 0.4, z: 0.2 });
+          pts.push({ x: PEN.minX - 0.6, z: 0.2 });
+        } else if (farmer.z < GARDEN.minZ) {
+          pts.push({ x: 2.85, z: -5.2 });
+          pts.push({ x: 2.85, z: GATE_CENTER.z });
+        }
+        pts.push({ x: GATE_CENTER.x + 0.75, z: GATE_CENTER.z });
+        pts.push({ x: GATE_CENTER.x - 0.35, z: GATE_CENTER.z });
+      } else if (!startInGarden && !destInGarden) {
+        if (startInPen) {
+          pts.push({ x: PEN.minX + 0.4, z: 0.2 });
+          pts.push({ x: 2.85, z: 0.2 });
+        }
+        if ((farmer.z > GARDEN.minZ && destZ < GARDEN.minZ) || (farmer.z < GARDEN.minZ && destZ > GARDEN.minZ)) {
+          pts.push({ x: 2.85, z: -5.2 });
+        }
+      }
+
+      if (!startInPen && destInPen) {
+        pts.push({ x: PEN.minX - 0.55, z: 0.2 });
+        pts.push({ x: PEN.minX + 0.55, z: 0.2 });
+      } else if (startInPen && !destInPen && !destInGarden) {
+        pts.push({ x: PEN.minX + 0.4, z: 0.2 });
+        pts.push({ x: PEN.minX - 0.6, z: 0.2 });
+      }
+
+      pts.push({ x: destX, z: destZ });
+      farmer.waypoints = pts;
+      farmer.pendingAction = pendingAction;
+    }
+
+    function resolveFarmerCollisions() {
+      const r = farmer.radius;
+      for (const box of obstacles) {
+        const closestX = THREE.MathUtils.clamp(farmer.x, box.minX, box.maxX);
+        const closestZ = THREE.MathUtils.clamp(farmer.z, box.minZ, box.maxZ);
+        const dx = farmer.x - closestX;
+        const dz = farmer.z - closestZ;
+        const distSq = dx * dx + dz * dz;
+
+        if (distSq < r * r) {
+          const dist = Math.sqrt(distSq);
+          if (dist > 0.0001) {
+            const overlap = r - dist;
+            farmer.x += (dx / dist) * overlap;
+            farmer.z += (dz / dist) * overlap;
+          } else {
+            farmer.x += r;
+          }
+        }
+      }
+      farmer.x = THREE.MathUtils.clamp(farmer.x, WORLD_LIMIT.minX, WORLD_LIMIT.maxX);
+      farmer.z = THREE.MathUtils.clamp(farmer.z, WORLD_LIMIT.minZ, WORLD_LIMIT.maxZ);
+    }
+
+    // =========================================================
+    // 11. HEWAN DI LUAR PAGAR (1 SAPI BULAT + 2 DOMBA + 1 KUCING)
+    // =========================================================
+    const animals = [];
+    const clickableAnimals = [];
+
+    function createCow(x, z, name = 'Sapi Belang', sleepSpot = { x: 5.75, z: -2.45 }) {
+      const group = new THREE.Group();
+      addBlobShadow(group, 0.72);
+
+      const coatCanvas = document.createElement('canvas');
+      coatCanvas.width = 256;
+      coatCanvas.height = 128;
+      const cctx = coatCanvas.getContext('2d');
+      cctx.fillStyle = '#fbf8f2';
+      cctx.fillRect(0, 0, 256, 128);
+      cctx.fillStyle = '#453124';
+      [
+        [48, 46, 30, 20, 0.3],
+        [128, 76, 34, 22, -0.25],
+        [195, 42, 28, 18, 0.45],
+        [88, 26, 20, 14, -0.15],
+        [225, 88, 24, 16, 0.2],
+        [22, 92, 22, 14, -0.3]
+      ].forEach(([sx, sy, rx, ry, rot]) => {
+        cctx.beginPath();
+        cctx.ellipse(sx, sy, rx, ry, rot, 0, Math.PI * 2);
+        cctx.fill();
+      });
+      const cowCoatTex = new THREE.CanvasTexture(coatCanvas);
+      cowCoatTex.colorSpace = THREE.SRGBColorSpace;
+
+      const coatMat = new THREE.MeshStandardMaterial({ map: cowCoatTex, roughness: 0.92 });
+      const whiteMat = new THREE.MeshStandardMaterial({ color: 0xfbf8f2, roughness: 0.92 });
+      const spotMat = new THREE.MeshStandardMaterial({ color: 0x453124, roughness: 0.9 });
+      const snoutMat = new THREE.MeshStandardMaterial({ color: 0xf2b5b5, roughness: 0.85 });
+      const nostrilMat = new THREE.MeshBasicMaterial({ color: 0x9e5e5e });
+      const hornMat = new THREE.MeshStandardMaterial({ color: 0xded3b8, roughness: 0.8 });
+
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.49, 16, 12), coatMat);
+      body.scale.set(1.32, 0.95, 0.94);
+      body.position.set(0, 0.58, 0);
+      body.castShadow = true;
+      body.receiveShadow = true;
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.27, 14, 12), whiteMat);
+      head.scale.set(1.04, 0.96, 0.95);
+      head.position.set(0.58, 0.74, 0);
+      head.castShadow = true;
+
+      const headSpot = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 10), spotMat);
+      headSpot.scale.set(0.85, 0.75, 0.9);
+      headSpot.position.set(0.56, 0.85, 0.12);
+
+      const snout = new THREE.Mesh(new THREE.SphereGeometry(0.175, 12, 10), snoutMat);
+      snout.scale.set(0.75, 0.78, 1.08);
+      snout.position.set(0.81, 0.67, 0);
+      snout.castShadow = true;
+
+      const nostrilGeo = new THREE.SphereGeometry(0.024, 6, 6);
+      const nosL = new THREE.Mesh(nostrilGeo, nostrilMat);
+      nosL.position.set(0.92, 0.68, -0.07);
+      const nosR = new THREE.Mesh(nostrilGeo, nostrilMat);
+      nosR.position.set(0.92, 0.68, 0.07);
+
+      const earGeo = new THREE.SphereGeometry(0.11, 8, 8);
+      const earL = new THREE.Mesh(earGeo, spotMat);
+      earL.scale.set(0.55, 0.48, 1.25);
+      earL.position.set(0.52, 0.84, -0.27);
+      earL.rotation.x = 0.25;
+
+      const earR = new THREE.Mesh(earGeo, spotMat);
+      earR.scale.set(0.55, 0.48, 1.25);
+      earR.position.set(0.52, 0.84, 0.27);
+      earR.rotation.x = -0.25;
+
+      const hornGeo = new THREE.ConeGeometry(0.045, 0.16, 8);
+      const hornL = new THREE.Mesh(hornGeo, hornMat);
+      hornL.position.set(0.55, 0.99, -0.14);
+      hornL.rotation.x = -0.32;
+      const hornR = new THREE.Mesh(hornGeo, hornMat);
+      hornR.position.set(0.55, 0.99, 0.14);
+      hornR.rotation.x = 0.32;
+
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x221710 });
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 8), eyeMat);
+      eyeL.position.set(0.75, 0.81, -0.15);
+      const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 8), eyeMat);
+      eyeR.position.set(0.75, 0.81, 0.15);
+
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.025, 0.4, 6), whiteMat);
+      tail.position.set(-0.62, 0.56, 0);
+      tail.rotation.z = -0.45;
+      const tailTip = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), spotMat);
+      tailTip.position.set(-0.71, 0.39, 0);
+
+      const legGeo = new THREE.CylinderGeometry(0.075, 0.06, 0.38, 8);
+      [[-0.28, -0.2], [-0.28, 0.2], [0.28, -0.2], [0.28, 0.2]].forEach(([lx, lz]) => {
+        const leg = new THREE.Mesh(legGeo, spotMat);
+        leg.position.set(lx, 0.2, lz);
+        leg.castShadow = true;
+        group.add(leg);
+      });
+
+      group.add(
+        body, head, headSpot, snout, nosL, nosR,
+        earL, earR, hornL, hornR, eyeL, eyeR, tail, tailTip
+      );
+      group.position.set(x, 0, z);
+      scene.add(group);
+
+      const animObj = {
+        group,
+        name,
+        targetX: x, targetZ: z,
+        waitTimer: Math.random() * 2,
+        speed: 0.62,
+        hopPhase: 0,
+        happyBounce: 0,
+        sleepSpot,
+        sleepOffsetY: -0.18,
+        isSleeping: false,
+        zzzTimer: Math.random() * 1.5,
+        bounds: { minX: 4.9, maxX: 7.3, minZ: -1.35, maxZ: 0.95 }
+      };
+
+      const hit = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5, 1.25, 1.05),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      hit.position.y = 0.62;
+      hit.userData = { type: 'animal', animalObj: animObj };
+      group.add(hit);
+      clickableAnimals.push(hit);
+      animals.push(animObj);
+    }
+
+    function createSheep(x, z, name = 'Domba', sleepSpot = { x: 6.5, z: -2.4 }) {
+      const group = new THREE.Group();
+      addBlobShadow(group, 0.58);
+
+      const woolMat = new THREE.MeshStandardMaterial({ color: 0xfbf6eb, roughness: 0.95 });
+      const darkMat = new THREE.MeshStandardMaterial({ color: 0x4b3b31, roughness: 0.85 });
+
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.4, 12, 10), woolMat);
+      body.scale.set(1.25, 0.95, 0.92);
+      body.position.set(0, 0.5, 0);
+      body.castShadow = true;
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.23, 10, 10), darkMat);
+      head.position.set(0.44, 0.62, 0);
+      head.castShadow = true;
+
+      const fluff = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 8), woolMat);
+      fluff.position.set(0.42, 0.78, 0);
+
+      const legGeo = new THREE.CylinderGeometry(0.06, 0.05, 0.32, 6);
+      [[-0.2, -0.17], [-0.2, 0.17], [0.2, -0.17], [0.2, 0.17]].forEach(([lx, lz]) => {
+        const leg = new THREE.Mesh(legGeo, darkMat);
+        leg.position.set(lx, 0.18, lz);
+        group.add(leg);
+      });
+
+      group.add(body, head, fluff);
+      group.position.set(x, 0, z);
+      scene.add(group);
+
+      const animObj = {
+        group,
+        name,
+        targetX: x, targetZ: z,
+        waitTimer: Math.random() * 2,
+        speed: 0.78,
+        hopPhase: 0,
+        happyBounce: 0,
+        sleepSpot,
+        sleepOffsetY: -0.14,
+        isSleeping: false,
+        zzzTimer: Math.random() * 1.5,
+        bounds: { minX: 4.8, maxX: 7.4, minZ: -1.4, maxZ: 1.0 }
+      };
+
+      const hit = new THREE.Mesh(
+        new THREE.BoxGeometry(1.15, 1.0, 0.95),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      hit.position.y = 0.5;
+      hit.userData = { type: 'animal', animalObj: animObj };
+      group.add(hit);
+      clickableAnimals.push(hit);
+      animals.push(animObj);
+    }
+
+    function createCat(x, z) {
+      const group = new THREE.Group();
+      addBlobShadow(group, 0.4);
+
+      const furMat = new THREE.MeshStandardMaterial({ color: 0xe69f56, roughness: 0.9 });
+      const whiteMat = new THREE.MeshStandardMaterial({ color: 0xfff8ee, roughness: 0.9 });
+
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.25, 10, 10), furMat);
+      body.scale.set(1.25, 0.85, 0.85);
+      body.position.set(0, 0.29, 0);
+      body.castShadow = true;
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 10), whiteMat);
+      head.position.set(0.27, 0.43, 0);
+      head.castShadow = true;
+
+      const earGeo = new THREE.ConeGeometry(0.065, 0.13, 4);
+      const earL = new THREE.Mesh(earGeo, furMat);
+      earL.position.set(0.27, 0.60, -0.09);
+      const earR = new THREE.Mesh(earGeo, furMat);
+      earR.position.set(0.27, 0.60, 0.09);
+
+      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.36, 6), furMat);
+      tail.position.set(-0.32, 0.44, 0);
+      tail.rotation.z = 0.65;
+
+      group.add(body, head, earL, earR, tail);
+      group.position.set(x, 0, z);
+      scene.add(group);
+
+      const animObj = {
+        group,
+        name: 'Kucing',
+        targetX: x, targetZ: z,
+        waitTimer: 1.4,
+        speed: 1.05,
+        hopPhase: 0,
+        happyBounce: 0,
+        sleepSpot: { x: 1.1, z: 3.65 },
+        sleepOffsetY: -0.09,
+        isSleeping: false,
+        zzzTimer: 1.0,
+        bounds: { minX: -2.2, maxX: 3.6, minZ: 3.5, maxZ: 4.55 }
+      };
+
+      const hit = new THREE.Mesh(
+        new THREE.BoxGeometry(0.95, 0.8, 0.85),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      hit.position.y = 0.4;
+      hit.userData = { type: 'animal', animalObj: animObj };
+      group.add(hit);
+      clickableAnimals.push(hit);
+      animals.push(animObj);
+    }
+
+    createCow(5.55, -0.75, 'Sapi Belang', { x: 5.75, z: -2.45 });
+    createSheep(6.85, 0.25, 'Domba Putih', { x: 6.9, z: -2.5 });
+    createSheep(5.85, 0.6, 'Domba Manis', { x: 7.75, z: -2.35 });
+    createCat(1.6, 4.0);
+    // =========================================================
     // 11A. SISTEM MEMANCING 3D (KAIL, BAYANGAN IKAN, TARIK-ULUR, 0 ❤️)
     // =========================================================
     const reelGameEl = document.getElementById('reel-game');
