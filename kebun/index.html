@@ -1,0 +1,2143 @@
+// =========================================================
+    // 11A. SISTEM MEMANCING 3D (KAIL, BAYANGAN IKAN, TARIK-ULUR, 0 ❤️)
+    // =========================================================
+    const reelGameEl = document.getElementById('reel-game');
+    const reelZoneEl = document.getElementById('reel-zone');
+    const reelFishEl = document.getElementById('reel-fish');
+    const reelProgFillEl = document.getElementById('reel-prog-fill');
+    const fishingGuideModalEl = document.getElementById('fishing-guide-modal');
+
+    document.getElementById('btn-close-fishing-guide').addEventListener('click', () => {
+      fishingGuideModalEl.classList.remove('open');
+      state.isPaused = false;
+    });
+
+    function openFirstFishingGuide() {
+      closeAllModals();
+      state.isPaused = true;
+      selectTool('rod');
+      fishingGuideModalEl.classList.add('open');
+    }
+
+    // Pelampung + Kail Metalik 3D + Umpan
+    const bobberGroup = new THREE.Group();
+    const bobberTop = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: 0xe64539, roughness: 0.4 })
+    );
+    const bobberBot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 10, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })
+    );
+    const hookMesh = new THREE.Mesh(
+      new THREE.TorusGeometry(0.055, 0.014, 6, 12, Math.PI * 1.35),
+      new THREE.MeshStandardMaterial({ color: 0xd0d8e0, metalness: 0.8, roughness: 0.2 })
+    );
+    hookMesh.position.set(0, -0.22, 0);
+    hookMesh.rotation.z = Math.PI * 0.85;
+    const baitMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.032, 6, 6),
+      new THREE.MeshStandardMaterial({ color: 0xff8a7a, roughness: 0.7 })
+    );
+    baitMesh.position.set(0.03, -0.25, 0);
+    bobberGroup.add(bobberTop, bobberBot, hookMesh, baitMesh);
+    bobberGroup.visible = false;
+    scene.add(bobberGroup);
+
+    // Riak air di sekitar pelampung
+    const rippleMesh = new THREE.Mesh(
+      new THREE.RingGeometry(0.14, 0.2, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.65 })
+    );
+    rippleMesh.rotation.x = -Math.PI / 2;
+    rippleMesh.visible = false;
+    scene.add(rippleMesh);
+
+    // Bayangan Ikan 3D di dalam air
+    const fishShadowGroup = new THREE.Group();
+    const shadowMat = new THREE.MeshBasicMaterial({ color: 0x164252, transparent: true, opacity: 0.45 });
+    const shadowBody = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), shadowMat);
+    shadowBody.scale.set(1.8, 0.35, 0.75);
+    const shadowTail = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.24, 4), shadowMat);
+    shadowTail.rotation.z = -Math.PI / 2;
+    shadowTail.position.set(-0.34, 0, 0);
+    fishShadowGroup.add(shadowBody, shadowTail);
+    fishShadowGroup.visible = false;
+    scene.add(fishShadowGroup);
+
+    // Model Ikan 3D yang diangkat petani saat berhasil
+    const liftedFishGroup = new THREE.Group();
+    const liftedBodyMat = new THREE.MeshStandardMaterial({ color: 0xff9f43, roughness: 0.35 });
+    const liftedBody = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), liftedBodyMat);
+    liftedBody.scale.set(1.65, 0.85, 0.55);
+    const liftedTail = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.26, 5), liftedBodyMat);
+    liftedTail.rotation.z = -Math.PI / 2;
+    liftedTail.position.set(-0.35, 0, 0);
+    liftedFishGroup.add(liftedBody, liftedTail);
+    liftedFishGroup.visible = false;
+    scene.add(liftedFishGroup);
+
+    // Tali pancing melengkung (12 segmen)
+    const LINE_PTS = 12;
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(
+      Array.from({ length: LINE_PTS }, () => new THREE.Vector3())
+    );
+    const fishingLine = new THREE.Line(
+      lineGeo,
+      new THREE.LineBasicMaterial({ color: 0xfff8e6, transparent: true, opacity: 0.85 })
+    );
+    fishingLine.visible = false;
+    scene.add(fishingLine);
+
+    const fishing = {
+      active: false,
+      phase: 'idle', // 'idle' | 'casting' | 'nibbling' | 'bite' | 'reeling' | 'caught'
+      timer: 0,
+      castT: 0,
+      bobberPos: new THREE.Vector3(2.85, 0.06, 6.2),
+      nibblesLeft: 2,
+      nibbleCooldown: 1.0,
+      targetFish: null,
+      holding: false,
+      zonePos: 0.35,
+      zoneVel: 0,
+      fishPos: 0.5,
+      fishTarget: 0.5,
+      fishMoveTimer: 0,
+      progress: 0.35,
+      liftTimer: 0
+    };
+
+    window.addEventListener('pointerup', () => { fishing.holding = false; });
+    window.addEventListener('pointercancel', () => { fishing.holding = false; });
+    window.addEventListener('blur', () => { fishing.holding = false; });
+    window.addEventListener('keyup', (e) => { if (e.code === 'Space') fishing.holding = false; });
+
+    function rollFishCatch() {
+      const isPro = state.upgrades.rod;
+      const isRainy = state.weather === 'rainy';
+      let totalWeight = 0;
+      const entries = FISH_ORDER.map(key => {
+        const sp = FISH_SPECIES[key];
+        let w = isPro ? sp.proWeight : sp.weight;
+        if (isRainy && (sp.rarity === 'Langka' || sp.rarity === 'Sangat Langka' || sp.rarity === 'Legendaris')) w *= 1.35;
+        totalWeight += w;
+        return { key, sp, w };
+      });
+      let r = Math.random() * totalWeight;
+      let chosen = entries[0];
+      for (const e of entries) { r -= e.w; if (r <= 0) { chosen = e; break; } }
+
+      let sizeRatio = Math.random();
+      if (isPro) sizeRatio = Math.min(1, sizeRatio * 0.82 + 0.22);
+      const sizeCm = Math.round(chosen.sp.minCm + sizeRatio * (chosen.sp.maxCm - chosen.sp.minCm));
+      let sizeLabel = 'Sedang';
+      let priceMult = 1.0;
+      if (sizeRatio < 0.25) { sizeLabel = 'Kecil'; priceMult = 0.85; }
+      else if (sizeRatio >= 0.85) { sizeLabel = 'Jumbo'; priceMult = 1.7; }
+      else if (sizeRatio >= 0.58) { sizeLabel = 'Besar'; priceMult = 1.3; }
+
+      const colors = { ikan_mas: 0xffa62b, nila: 0x6ea8c9, lele: 0x4f5b66, gabus: 0x5c7a52, salmon: 0xe66a5c, koi_emas: 0xffd53d };
+      return {
+        key: chosen.key,
+        name: chosen.sp.name,
+        icon: chosen.sp.icon,
+        rarity: chosen.sp.rarity,
+        sizeCm,
+        sizeLabel,
+        price: Math.max(10, Math.round(chosen.sp.basePrice * priceMult)),
+        color: colors[chosen.key] || 0xffa62b,
+        difficulty: chosen.sp.rarity === 'Legendaris' ? 1.55 : chosen.sp.rarity === 'Sangat Langka' ? 1.35 : chosen.sp.rarity === 'Langka' ? 1.18 : 0.9
+      };
+    }
+
+    function startFishing(waterX, waterZ) {
+      if (!state.hasRod) {
+        showToast('Beli 🎣 Alat Pancing dulu di 📱 Toko Online (tab Alat Canggih)!');
+        return;
+      }
+      // Bebas tenaga (0 ❤️)
+      fishing.active = true;
+      fishing.phase = 'casting';
+      fishing.castT = 0;
+      fishing.holding = false;
+      fishing.nibblesLeft = 1 + Math.floor(Math.random() * 3);
+      fishing.nibbleCooldown = 1.1 + Math.random() * 0.8;
+      fishing.targetFish = rollFishCatch();
+      fishing.bobberPos.set(waterX, 0.06, THREE.MathUtils.clamp(waterZ, 5.75, 7.65));
+
+      bobberGroup.visible = true;
+      fishingLine.visible = true;
+      rippleMesh.visible = false;
+      fishShadowGroup.visible = false;
+      liftedFishGroup.visible = false;
+
+      farmer.group.rotation.y = Math.atan2(waterX - farmer.x, waterZ - farmer.z);
+      farmer.actionAnim = 0.9;
+
+      fishingBannerEl.textContent = '🎣 Melempar kail ke sungai...';
+      fishingBannerEl.classList.remove('bite');
+      fishingBannerEl.classList.add('active');
+    }
+
+    function stopFishing() {
+      fishing.active = false;
+      fishing.phase = 'idle';
+      fishing.holding = false;
+      bobberGroup.visible = false;
+      fishingLine.visible = false;
+      rippleMesh.visible = false;
+      fishShadowGroup.visible = false;
+      liftedFishGroup.visible = false;
+      fishingBannerEl.classList.remove('active', 'bite');
+      reelGameEl.classList.remove('active');
+    }
+
+    function reelInFish() {
+      if (!fishing.active) return;
+
+      if (fishing.phase === 'casting' || fishing.phase === 'nibbling') {
+        stopFishing();
+        showToast('Terlalu cepat diangkat! Ikan kaget dan kabur 🐟💨');
+        return;
+      }
+
+      if (fishing.phase === 'bite') {
+        fishing.phase = 'reeling';
+        fishing.holding = true;
+        fishing.zonePos = 0.35;
+        fishing.zoneVel = 0;
+        fishing.fishPos = 0.5;
+        fishing.fishTarget = 0.5;
+        fishing.progress = 0.32;
+        fishingBannerEl.classList.remove('active', 'bite');
+        reelFishEl.textContent = fishing.targetFish.icon;
+        reelGameEl.classList.add('active');
+        return;
+      }
+
+      if (fishing.phase === 'reeling') {
+        fishing.holding = true;
+      }
+    }
+
+    function completeFishCatch() {
+      const caught = fishing.targetFish;
+      const isNew = !state.fishCodex[caught.key];
+
+      state.storage.fish.push({ key: caught.key, sizeCm: caught.sizeCm, sizeLabel: caught.sizeLabel, price: caught.price });
+      if (!state.fishCodex[caught.key]) {
+        state.fishCodex[caught.key] = { count: 1, minCm: caught.sizeCm, maxCm: caught.sizeCm };
+      } else {
+        const entry = state.fishCodex[caught.key];
+        entry.count += 1;
+        entry.minCm = Math.min(entry.minCm, caught.sizeCm);
+        entry.maxCm = Math.max(entry.maxCm, caught.sizeCm);
+      }
+
+      fishing.phase = 'caught';
+      fishing.liftTimer = 1.8;
+      bobberGroup.visible = false;
+      fishingLine.visible = false;
+      rippleMesh.visible = false;
+      fishShadowGroup.visible = false;
+      reelGameEl.classList.remove('active');
+
+      liftedBodyMat.color.setHex(caught.color);
+      const sc = caught.sizeLabel === 'Jumbo' ? 1.35 : caught.sizeLabel === 'Besar' ? 1.15 : 0.92;
+      liftedFishGroup.scale.set(sc, sc, sc);
+      liftedFishGroup.visible = true;
+
+      spawnBurst(fishing.bobberPos.x, 0.25, fishing.bobberPos.z, 0x9be0f0, 14);
+      spawnHeart(farmer.x, 1.85, farmer.z, isNew ? 3 : 1);
+      updateHUD();
+
+      const newTag = isNew ? ' 🆕 Info terbuka di 📖 Petunjuk!' : '';
+      showToast(`🎣 Dapat ${caught.icon} ${caught.name} (${caught.sizeLabel} ${caught.sizeCm} cm • ${caught.price} 🪙)!${newTag}`);
+    }
+
+    function updateFishing(dt, elapsed) {
+      if (!fishing.active) return;
+
+      const tipX = farmer.x + Math.sin(farmer.group.rotation.y) * 1.15;
+      const tipZ = farmer.z + Math.cos(farmer.group.rotation.y) * 1.15;
+      const tipY = 1.38;
+
+      if (fishing.phase === 'casting') {
+        fishing.castT = Math.min(1, fishing.castT + dt * 2.2);
+        const t = fishing.castT;
+        bobberGroup.position.set(
+          THREE.MathUtils.lerp(tipX, fishing.bobberPos.x, t),
+          THREE.MathUtils.lerp(tipY, 0.06, t) + Math.sin(t * Math.PI) * 1.1,
+          THREE.MathUtils.lerp(tipZ, fishing.bobberPos.z, t)
+        );
+        if (t >= 1) {
+          fishing.phase = 'nibbling';
+          rippleMesh.position.set(fishing.bobberPos.x, 0.03, fishing.bobberPos.z);
+          rippleMesh.visible = true;
+          fishShadowGroup.position.set(fishing.bobberPos.x + 1.5, 0.02, fishing.bobberPos.z + 0.4);
+          fishShadowGroup.visible = true;
+          spawnBurst(fishing.bobberPos.x, 0.12, fishing.bobberPos.z, 0x9be0f0, 8);
+          fishingBannerEl.textContent = '🐟 Bayangan ikan mendekat... tunggu pelampung tenggelam!';
+        }
+      } else if (fishing.phase === 'nibbling') {
+        bobberGroup.position.y = 0.05 + Math.sin(elapsed * 4.5) * 0.025;
+
+        const dx = fishing.bobberPos.x - fishShadowGroup.position.x;
+        const dz = fishing.bobberPos.z - fishShadowGroup.position.z;
+        const dist = Math.hypot(dx, dz);
+        shadowTail.rotation.y = Math.sin(elapsed * 14) * 0.45;
+
+        if (dist > 0.35) {
+          fishShadowGroup.position.x += (dx / dist) * dt * 1.1;
+          fishShadowGroup.position.z += (dz / dist) * dt * 1.1;
+          fishShadowGroup.rotation.y = Math.atan2(-dz, dx);
+        } else {
+          fishing.nibbleCooldown -= dt;
+          if (fishing.nibbleCooldown <= 0) {
+            fishing.nibblesLeft -= 1;
+            bobberGroup.position.y = -0.02;
+            spawnBurst(fishing.bobberPos.x, 0.09, fishing.bobberPos.z, 0xd8f6ff, 5);
+
+            if (fishing.nibblesLeft <= 0) {
+              fishing.phase = 'bite';
+              fishing.timer = state.upgrades.rod ? 2.8 : 2.1;
+              fishingBannerEl.textContent = '❗ IKAN MENYAMBAR! Klik layar atau tekan Spasi!';
+              fishingBannerEl.classList.add('bite');
+              spawnBurst(fishing.bobberPos.x, 0.15, fishing.bobberPos.z, 0xffffff, 12);
+            } else {
+              fishShadowGroup.position.x += 0.35;
+              fishing.nibbleCooldown = 0.85 + Math.random() * 0.9;
+            }
+          }
+        }
+      } else if (fishing.phase === 'bite') {
+        bobberGroup.position.y = -0.06 + Math.sin(elapsed * 28) * 0.06;
+        shadowTail.rotation.y = Math.sin(elapsed * 26) * 0.65;
+        fishing.timer -= dt;
+        if (fishing.timer <= 0) {
+          stopFishing();
+          showToast('Yah, ikannya keburu lepas! Coba lempar lagi 🎣');
+          return;
+        }
+      } else if (fishing.phase === 'reeling') {
+        const zoneWidth = state.upgrades.rod ? 0.34 : 0.24;
+        const diff = fishing.targetFish ? fishing.targetFish.difficulty : 1.0;
+
+        const accel = fishing.holding ? 1.85 : -1.55;
+        fishing.zoneVel = THREE.MathUtils.clamp(fishing.zoneVel + accel * dt, -1.1, 1.1);
+        fishing.zonePos += fishing.zoneVel * dt;
+        if (fishing.zonePos < 0) { fishing.zonePos = 0; fishing.zoneVel = 0; }
+        if (fishing.zonePos > 1 - zoneWidth) { fishing.zonePos = 1 - zoneWidth; fishing.zoneVel = 0; }
+
+        fishing.fishMoveTimer -= dt;
+        if (fishing.fishMoveTimer <= 0) {
+          fishing.fishTarget = 0.08 + Math.random() * 0.84;
+          fishing.fishMoveTimer = (0.55 + Math.random() * 0.7) / diff;
+        }
+        fishing.fishPos += (fishing.fishTarget - fishing.fishPos) * Math.min(1, dt * 3.2 * diff);
+
+        const inside = fishing.fishPos >= fishing.zonePos && fishing.fishPos <= (fishing.zonePos + zoneWidth);
+        fishing.progress += (inside ? 0.34 : -0.22) * dt;
+        fishing.progress = THREE.MathUtils.clamp(fishing.progress, 0, 1);
+
+        reelZoneEl.style.left = `${fishing.zonePos * 100}%`;
+        reelZoneEl.style.width = `${zoneWidth * 100}%`;
+        reelFishEl.style.left = `${fishing.fishPos * 100}%`;
+        reelProgFillEl.style.width = `${fishing.progress * 100}%`;
+
+        bobberGroup.position.x = fishing.bobberPos.x + (fishing.fishPos - 0.5) * 0.65;
+        bobberGroup.position.y = -0.02 + Math.sin(elapsed * 22) * 0.05;
+
+        if (fishing.progress >= 1) {
+          completeFishCatch();
+          return;
+        } else if (fishing.progress <= 0) {
+          stopFishing();
+          showToast('Tali kendor! Ikannya berhasil kabur 🐟💨');
+          return;
+        }
+      } else if (fishing.phase === 'caught') {
+        fishing.liftTimer -= dt;
+        const p = Math.min(1, (1.8 - fishing.liftTimer) / 0.45);
+        liftedFishGroup.position.set(
+          THREE.MathUtils.lerp(fishing.bobberPos.x, farmer.x, p),
+          THREE.MathUtils.lerp(0.2, 1.95, p) + Math.sin(p * Math.PI) * 0.7,
+          THREE.MathUtils.lerp(fishing.bobberPos.z, farmer.z, p)
+        );
+        liftedFishGroup.rotation.y = elapsed * 2.4;
+        liftedTail.rotation.y = Math.sin(elapsed * 20) * 0.5;
+        if (fishing.liftTimer <= 0) {
+          stopFishing();
+        }
+        return;
+      }
+
+      if (rippleMesh.visible) {
+        const rScale = 1 + ((elapsed * 1.4) % 1) * 1.8;
+        rippleMesh.scale.set(rScale, rScale, 1);
+        rippleMesh.material.opacity = 0.65 * (1 - ((elapsed * 1.4) % 1));
+      }
+
+      const posAttr = fishingLine.geometry.attributes.position;
+      for (let i = 0; i < LINE_PTS; i++) {
+        const t = i / (LINE_PTS - 1);
+        const sag = fishing.phase === 'reeling' ? 0.04 : 0.22;
+        const lx = THREE.MathUtils.lerp(tipX, bobberGroup.position.x, t);
+        const ly = THREE.MathUtils.lerp(tipY, bobberGroup.position.y + 0.08, t) - Math.sin(t * Math.PI) * sag;
+        const lz = THREE.MathUtils.lerp(tipZ, bobberGroup.position.z, t);
+        posAttr.setXYZ(i, lx, ly, lz);
+      }
+      posAttr.needsUpdate = true;
+    }
+
+    // =========================================================
+    // 11B. SISTEM KURIR 3D & PARTIKEL
+    // =========================================================
+    const COURIER_SPAWN = { x: 11.8, z: -5.2 };
+    const COURIER_DROP = { x: 2.35, z: -5.2 };
+
+    const courier = {
+      group: new THREE.Group(),
+      leftLeg: null,
+      rightLeg: null,
+      leftArm: null,
+      rightArm: null,
+      boxMesh: null,
+      state: 'idle',
+      timer: 0,
+      walkPhase: 0,
+      speed: 5.4,
+      currentOrder: null,
+      queue: []
+    };
+
+    function buildCourier() {
+      const g = courier.group;
+      addBlobShadow(g, 0.48);
+
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xf6cba8, roughness: 0.85 });
+      const uniformMat = new THREE.MeshStandardMaterial({ color: 0x3b72bd, roughness: 0.8 });
+      const capMat = new THREE.MeshStandardMaterial({ color: 0x26528f, roughness: 0.8 });
+      const pantsMat = new THREE.MeshStandardMaterial({ color: 0x2c3c54, roughness: 0.9 });
+      const parcelMat = new THREE.MeshStandardMaterial({ color: 0xc9935b, roughness: 0.88 });
+      const tapeMat = new THREE.MeshStandardMaterial({ color: 0xf2d28b, roughness: 0.8 });
+
+      const legGeo = new THREE.CylinderGeometry(0.075, 0.07, 0.36, 8);
+      courier.leftLeg = new THREE.Mesh(legGeo, pantsMat);
+      courier.leftLeg.position.set(-0.11, 0.2, 0);
+      courier.leftLeg.castShadow = true;
+
+      courier.rightLeg = new THREE.Mesh(legGeo, pantsMat);
+      courier.rightLeg.position.set(0.11, 0.2, 0);
+      courier.rightLeg.castShadow = true;
+
+      const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.23, 0.5, 10), uniformMat);
+      torso.position.y = 0.6;
+      torso.castShadow = true;
+
+      const armGeo = new THREE.CylinderGeometry(0.06, 0.055, 0.35, 8);
+      courier.leftArm = new THREE.Mesh(armGeo, uniformMat);
+      courier.leftArm.position.set(-0.25, 0.65, 0.06);
+      courier.leftArm.castShadow = true;
+
+      courier.rightArm = new THREE.Mesh(armGeo, uniformMat);
+      courier.rightArm.position.set(0.25, 0.65, 0.06);
+      courier.rightArm.castShadow = true;
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.23, 12, 12), skinMat);
+      head.position.y = 1.05;
+      head.castShadow = true;
+
+      const capDome = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), capMat);
+      capDome.position.y = 1.08;
+      const capVisor = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.04, 0.22), capMat);
+      capVisor.position.set(0, 1.15, 0.2);
+
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x2b1d14 });
+      const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 6), eyeMat);
+      eyeL.position.set(-0.08, 1.05, 0.21);
+      const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 6), eyeMat);
+      eyeR.position.set(0.08, 1.05, 0.21);
+
+      const parcelGroup = new THREE.Group();
+      const parcelBox = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.34, 0.36), parcelMat);
+      parcelBox.castShadow = true;
+      const parcelTape = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.06, 0.1), tapeMat);
+      parcelTape.position.y = 0.15;
+      parcelGroup.add(parcelBox, parcelTape);
+      parcelGroup.position.set(0, 0.68, 0.36);
+      courier.boxMesh = parcelGroup;
+
+      g.add(
+        courier.leftLeg, courier.rightLeg, torso,
+        courier.leftArm, courier.rightArm,
+        head, capDome, capVisor, eyeL, eyeR, parcelGroup
+      );
+      g.visible = false;
+      scene.add(g);
+    }
+    buildCourier();
+
+    function queueCourierOrder(order) {
+      courier.queue.push(order);
+      if (courier.state === 'idle') startNextCourierOrder();
+    }
+
+    function startNextCourierOrder() {
+      if (courier.queue.length === 0) {
+        courier.state = 'idle';
+        courier.currentOrder = null;
+        courier.group.visible = false;
+        courierBannerEl.classList.remove('active');
+        return;
+      }
+
+      courier.currentOrder = courier.queue.shift();
+      courier.state = 'arriving';
+      courier.group.position.set(COURIER_SPAWN.x, 0, COURIER_SPAWN.z);
+      courier.group.visible = true;
+      courier.boxMesh.visible = courier.currentOrder.kind === 'deliver';
+
+      courierBannerEl.textContent = courier.currentOrder.kind === 'deliver'
+        ? `🚚 Kurir sedang mengantar ${courier.currentOrder.label}...`
+        : `🚚 Kurir sedang datang menjemput ${courier.currentOrder.label}...`;
+      courierBannerEl.classList.add('active');
+    }
+
+    function animateCourierWalk(dt, holdingBox) {
+      courier.walkPhase += dt * 15;
+      const swing = Math.sin(courier.walkPhase) * 0.6;
+      courier.leftLeg.rotation.x = swing;
+      courier.rightLeg.rotation.x = -swing;
+      if (holdingBox) {
+        courier.leftArm.rotation.x = -1.1;
+        courier.rightArm.rotation.x = -1.1;
+      } else {
+        courier.leftArm.rotation.x = -swing * 0.7;
+        courier.rightArm.rotation.x = swing * 0.7;
+      }
+      courier.group.position.y = Math.abs(Math.sin(courier.walkPhase)) * 0.1;
+    }
+
+    function updateCourier(dt) {
+      if (courier.state === 'idle' || !courier.currentOrder) return;
+
+      if (courier.state === 'arriving') {
+        const dx = COURIER_DROP.x - courier.group.position.x;
+        const dz = COURIER_DROP.z - courier.group.position.z;
+        const dist = Math.hypot(dx, dz);
+
+        if (dist > 0.12) {
+          const step = Math.min(dist, courier.speed * dt);
+          courier.group.position.x += (dx / dist) * step;
+          courier.group.position.z += (dz / dist) * step;
+          courier.group.rotation.y = Math.atan2(dx, dz);
+          animateCourierWalk(dt, courier.boxMesh.visible);
+        } else {
+          courier.state = 'delivering';
+          courier.timer = 1.05;
+          courier.group.rotation.y = Math.atan2(-0.5, -1);
+        }
+      } else if (courier.state === 'delivering') {
+        courier.timer -= dt;
+        courier.leftLeg.rotation.x *= 0.8;
+        courier.rightLeg.rotation.x *= 0.8;
+        courier.group.position.y = Math.abs(Math.sin(courier.timer * 8)) * 0.08;
+
+        if (courier.timer <= 0) {
+          const ord = courier.currentOrder;
+          if (ord.kind === 'deliver') {
+            courier.boxMesh.visible = false;
+            ord.onComplete();
+            spawnBurst(COURIER_DROP.x - 0.3, 0.7, COURIER_DROP.z - 0.5, 0xffe066, 12);
+            showToast(`📦 Kurir selesai mengantar: ${ord.label}!`);
+          } else {
+            courier.boxMesh.visible = true;
+            ord.onComplete();
+            spawnHeart(COURIER_DROP.x, 1.35, COURIER_DROP.z, 2);
+            spawnBurst(COURIER_DROP.x - 0.3, 0.7, COURIER_DROP.z - 0.5, 0x8bc663, 12);
+            showToast(`💰 Kurir mengambil ${ord.label}! +${ord.payout} Koin 🪙`);
+          }
+          updateHUD();
+          advanceTutorialIfReady();
+          if (storageModalEl.classList.contains('open')) renderStorageModal();
+          if (shopModalEl.classList.contains('open')) renderShopModal();
+
+          courier.state = 'leaving';
+          courierBannerEl.textContent = '🚚 Kurir selesai bertugas dan kembali ke kota...';
+        }
+      } else if (courier.state === 'leaving') {
+        const dx = COURIER_SPAWN.x - courier.group.position.x;
+        const dz = COURIER_SPAWN.z - courier.group.position.z;
+        const dist = Math.hypot(dx, dz);
+
+        if (dist > 0.2) {
+          const step = Math.min(dist, courier.speed * dt);
+          courier.group.position.x += (dx / dist) * step;
+          courier.group.position.z += (dz / dist) * step;
+          courier.group.rotation.y = Math.atan2(dx, dz);
+          animateCourierWalk(dt, courier.boxMesh.visible);
+        } else {
+          startNextCourierOrder();
+        }
+      }
+    }
+
+    const floatingHearts = [];
+    function spawnHeart(x, y, z, count = 1) {
+      for (let i = 0; i < count; i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: heartTex, transparent: true, opacity: 1 }));
+        sp.position.set(x + (Math.random() - 0.5) * 0.45, y + i * 0.25, z + (Math.random() - 0.5) * 0.45);
+        const sc = 0.42 + Math.random() * 0.22;
+        sp.scale.set(sc, sc, 1);
+        scene.add(sp);
+        floatingHearts.push({ sprite: sp, life: 1.0, vy: 0.9 + Math.random() * 0.35 });
+      }
+    }
+
+    function spawnZzz(x, y, z) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: zzzTex, transparent: true, opacity: 0.95 }));
+      sp.position.set(x + (Math.random() - 0.5) * 0.2, y, z + (Math.random() - 0.5) * 0.2);
+      sp.scale.set(0.45, 0.45, 1);
+      scene.add(sp);
+      floatingHearts.push({ sprite: sp, life: 1.35, vy: 0.5 });
+    }
+
+    const burstParticles = [];
+    const burstGeo = new THREE.SphereGeometry(0.06, 6, 6);
+    function spawnBurst(x, y, z, colorHex, count = 8) {
+      for (let i = 0; i < count; i++) {
+        const mat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.95 });
+        const m = new THREE.Mesh(burstGeo, mat);
+        m.position.set(x, y, z);
+        scene.add(m);
+        const angle = Math.random() * Math.PI * 2;
+        const spd = 1.0 + Math.random() * 1.4;
+        burstParticles.push({
+          mesh: m,
+          vx: Math.cos(angle) * spd,
+          vy: 1.8 + Math.random() * 1.4,
+          vz: Math.sin(angle) * spd,
+          life: 0.65
+        });
+      }
+    }
+
+    const petals = [];
+    const petalGeo = new THREE.PlaneGeometry(0.18, 0.12);
+    const petalMat = new THREE.MeshBasicMaterial({ color: 0xffc4d6, side: THREE.DoubleSide, transparent: true, opacity: 0.82 });
+    for (let i = 0; i < 24; i++) {
+      const p = new THREE.Mesh(petalGeo, petalMat);
+      p.position.set((Math.random() - 0.5) * 26, 2 + Math.random() * 8, (Math.random() - 0.5) * 24);
+      p.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      scene.add(p);
+      petals.push({
+        mesh: p,
+        vx: -0.45 - Math.random() * 0.35,
+        vy: -0.42 - Math.random() * 0.25,
+        vz: 0.35 + Math.random() * 0.3,
+        rotSpeed: 1 + Math.random() * 1.5
+      });
+    }
+
+    const fireflies = [];
+    function createGlowDotTexture() {
+      const c = document.createElement('canvas');
+      c.width = 32;
+      c.height = 32;
+      const ctx = c.getContext('2d');
+      const g = ctx.createRadialGradient(16, 16, 1, 16, 16, 15);
+      g.addColorStop(0, 'rgba(255, 248, 165, 1)');
+      g.addColorStop(0.5, 'rgba(255, 215, 95, 0.5)');
+      g.addColorStop(1, 'rgba(255, 215, 95, 0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 32, 32);
+      return new THREE.CanvasTexture(c);
+    }
+    const glowDotTex = createGlowDotTexture();
+    for (let i = 0; i < 18; i++) {
+      const mat = new THREE.SpriteMaterial({ map: glowDotTex, transparent: true, opacity: 0, depthWrite: false });
+      const sp = new THREE.Sprite(mat);
+      const bx = (Math.random() - 0.5) * 18;
+      const bz = -5 + Math.random() * 12;
+      const by = 0.55 + Math.random() * 1.4;
+      sp.position.set(bx, by, bz);
+      sp.scale.set(0.35, 0.35, 1);
+      scene.add(sp);
+      fireflies.push({ sprite: sp, bx, by, bz, phase: Math.random() * Math.PI * 2 });
+    }
+
+    const rainGroup = new THREE.Group();
+    const rainDrops = [];
+    const rainGeo = new THREE.BoxGeometry(0.022, 0.52, 0.022);
+    const rainMat = new THREE.MeshBasicMaterial({ color: 0xd9efff, transparent: true, opacity: 0.58 });
+    for (let i = 0; i < 150; i++) {
+      const drop = new THREE.Mesh(rainGeo, rainMat);
+      drop.position.set((Math.random() - 0.5) * 28, Math.random() * 14, (Math.random() - 0.5) * 26);
+      drop.rotation.z = 0.14;
+      rainGroup.add(drop);
+      rainDrops.push({ mesh: drop, speed: 12 + Math.random() * 5 });
+    }
+    rainGroup.visible = false;
+    scene.add(rainGroup);
+
+    // =========================================================
+    // 12. MODAL, TOKO ONLINE KERANJANG, RUMAH & AKSI BERTANI
+    // =========================================================
+    function closeAllModals() {
+      houseModalEl.classList.remove('open');
+      storageModalEl.classList.remove('open');
+      shopModalEl.classList.remove('open');
+      guideModalEl.classList.remove('open');
+      reportModalEl.classList.remove('open');
+      fishingGuideModalEl.classList.remove('open');
+      state.isPaused = false;
+    }
+
+    function openGuideModal() {
+      closeAllModals();
+      state.isPaused = true;
+      renderGuideModal();
+      guideModalEl.classList.add('open');
+    }
+
+    function renderGuideModal() {
+      guideTabButtons.forEach(b => b.classList.toggle('active', b.dataset.guideTab === state.guideTab));
+
+      if (state.guideTab === 'crops') {
+        guideDescEl.textContent = 'Pelajari lama waktu panen setiap tanaman agar kebunmu selalu subur.';
+        const order = ['cabbage', 'carrot', 'white', 'red'];
+        guideListEl.innerHTML = order.map(key => {
+          const c = CROPS[key];
+          const unitCost = Math.round(c.packPrice / 5);
+          return `
+            <div class="item-row">
+              <div class="item-info">
+                <span class="item-icon">${c.icon}</span>
+                <div>
+                  <div class="item-name">${c.name} — Panen ${c.daysToGrow} Hari</div>
+                  <div class="item-sub">Bibit: ${c.packPrice} 🪙 / 5 pcs (~${unitCost} 🪙) • Jual: ${c.sellPrice} 🪙/pcs</div>
+                </div>
+              </div>
+              <strong>${c.daysToGrow} hr</strong>
+            </div>
+          `;
+        }).join('');
+        guideNoteEl.innerHTML = `
+          <strong>💡 Tips Bertani:</strong><br/>
+          • Tanaman tumbuh 1 hari setiap kali kamu <strong>tidur malam</strong> setelah disiram.<br/>
+          • Saat hari <strong>🌧️ Hujan</strong> (jarang terjadi), seluruh petak otomatis basah — kamu tidak perlu menyiram!<br/>
+          • Tidur sebelum <strong>23:00</strong> agar tenaga pulih penuh 10/10 ❤️.
+        `;
+      } else {
+        const discoveredCount = Object.keys(state.fishCodex).length;
+        guideDescEl.textContent = `Ensiklopedia Ikan Sungai — Terbuka: ${discoveredCount} / ${FISH_ORDER.length} jenis ikan.`;
+        guideListEl.innerHTML = FISH_ORDER.map(key => {
+          const sp = FISH_SPECIES[key];
+          const record = state.fishCodex[key];
+          if (!record) {
+            return `
+              <div class="item-row fish-locked">
+                <div class="item-info">
+                  <span class="item-icon">❓</span>
+                  <div>
+                    <div class="item-name">??? (${sp.rarity})</div>
+                    <div class="item-sub">Belum tertangkap — memancinglah di sungai untuk membuka data ikan ini!</div>
+                  </div>
+                </div>
+                <strong>Terkunci</strong>
+              </div>
+            `;
+          }
+          return `
+            <div class="item-row">
+              <div class="item-info">
+                <span class="item-icon">${sp.icon}</span>
+                <div>
+                  <div class="item-name">${sp.name} <span style="font-size:11px; color:#8f5e24;">(${sp.rarity})</span></div>
+                  <div class="item-sub">${sp.desc}<br/>Rekor ukuran: <strong>${record.minCm}–${record.maxCm} cm</strong> • Harga dasar: ${sp.basePrice} 🪙</div>
+                </div>
+              </div>
+              <strong>${record.count}×</strong>
+            </div>
+          `;
+        }).join('');
+        guideNoteEl.innerHTML = `
+          <strong>🎣 Tips Memancing (0 ❤️ Gratis):</strong><br/>
+          • Tunggu bayangan ikan mengendus 1–3 kali hingga pelampung tenggelam & muncul <strong>❗</strong>.<br/>
+          • Saat tarik-ulur, <strong>tahan Klik / Spasi</strong> agar zona hijau mengikuti ikan.<br/>
+          • Upgrade ke <strong>Pancing Karbon Pro</strong> untuk zona hijau lebih lebar & peluang ikan langka lebih tinggi.
+        `;
+      }
+    }
+
+    guideTabButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.guideTab = btn.dataset.guideTab;
+        renderGuideModal();
+      });
+    });
+
+    document.getElementById('btn-open-guide').addEventListener('click', openGuideModal);
+    btnCloseGuide.addEventListener('click', closeAllModals);
+
+    function rollWeatherForNewDay() {
+      if (state.weather === 'rainy') {
+        state.weather = 'sunny';
+      } else {
+        state.weather = Math.random() < 0.22 ? 'rainy' : 'sunny';
+      }
+      rainGroup.visible = state.weather === 'rainy';
+    }
+
+    function applyRainToTiles() {
+      if (state.weather !== 'rainy') return;
+      tiles.forEach(tile => {
+        if (tile.state !== 'empty') {
+          tile.watered = true;
+          refreshTileVisual(tile);
+        }
+      });
+    }
+
+    function renderStorageModal() {
+      const upgradedTools = [];
+      if (state.upgrades.hoe) upgradedTools.push('⛏️ Cangkul Baja (2×2)');
+      if (state.upgrades.planter) upgradedTools.push('🌱 Penanam Otomatis (2×2)');
+      if (state.upgrades.water) upgradedTools.push('💧 Gembor Emas (2×2)');
+      if (state.upgrades.harvest) upgradedTools.push('🧺 Sabit Kilat (2×2)');
+      if (state.upgrades.rod) upgradedTools.push('🎣 Pancing Karbon Pro');
+      else if (state.hasRod) upgradedTools.push('🎣 Pancing Kayu');
+
+      const fishTotalValue = state.storage.fish.reduce((sum, f) => sum + f.price, 0);
+
+      storageListEl.innerHTML = `
+        <div class="item-row">
+          <div class="item-info"><span class="item-icon">🥬</span><div><div class="item-name">Kubis (Hasil Panen)</div><div class="item-sub">Panen 2 hari • Harga jual: 22 Koin / pcs</div></div></div>
+          <strong>${state.storage.cabbage} pcs</strong>
+        </div>
+        <div class="item-row">
+          <div class="item-info"><span class="item-icon">🥕</span><div><div class="item-name">Wortel (Hasil Panen)</div><div class="item-sub">Panen 3 hari • Harga jual: 30 Koin / pcs</div></div></div>
+          <strong>${state.storage.carrot} pcs</strong>
+        </div>
+        <div class="item-row">
+          <div class="item-info"><span class="item-icon">🌼</span><div><div class="item-name">Bunga Aster (Hasil Panen)</div><div class="item-sub">Panen 4 hari • Harga jual: 38 Koin / pcs</div></div></div>
+          <strong>${state.storage.daisy} pcs</strong>
+        </div>
+        <div class="item-row">
+          <div class="item-info"><span class="item-icon">🌹</span><div><div class="item-name">Bunga Mawar (Hasil Panen)</div><div class="item-sub">Panen 5 hari • Harga jual: 50 Koin / pcs</div></div></div>
+          <strong>${state.storage.rose} pcs</strong>
+        </div>
+        <div class="item-row">
+          <div class="item-info"><span class="item-icon">🐟</span><div><div class="item-name">Ikan Hasil Pancing</div><div class="item-sub">${state.storage.fish.length > 0 ? `Total nilai jual: ${fishTotalValue} Koin 🪙` : 'Belum ada ikan. Memancinglah di sungai!'}</div></div></div>
+          <strong>${state.storage.fish.length} ekor</strong>
+        </div>
+        <div class="item-row">
+          <div class="item-info"><span class="item-icon">🌱</span><div><div class="item-name">Stok Bibit di Gudang</div><div class="item-sub">🥬 ${state.storage.seed_cabbage} • 🥕 ${state.storage.seed_carrot} • 🌼 ${state.storage.seed_white} • 🌹 ${state.storage.seed_red}</div></div></div>
+          <strong>${getTotalSeeds()} bibit</strong>
+        </div>
+        <div class="item-row">
+          <div class="item-info"><span class="item-icon">⚡</span><div><div class="item-name">Peralatan & Upgrade Dimiliki</div><div class="item-sub">${upgradedTools.length > 0 ? upgradedTools.join(' • ') : 'Belum ada. Beli di Toko Online!'}</div></div></div>
+          <strong>${upgradedTools.length}/5</strong>
+        </div>
+      `;
+    }
+
+    function openStorageModal() {
+      closeAllModals();
+      state.isPaused = true;
+      renderStorageModal();
+      storageModalEl.classList.add('open');
+    }
+
+    const SHOP_SEED_CATALOG = [
+      { icon: '🥬', name: 'Paket 5 Bibit Kubis', shortName: 'Paket Kubis', sub: 'Panen cepat 2 hari • Jual 22 🪙/pcs', price: 18, key: 'seed_cabbage', qty: 5 },
+      { icon: '🥕', name: 'Paket 5 Bibit Wortel', shortName: 'Paket Wortel', sub: 'Panen 3 hari • Jual 30 🪙/pcs', price: 24, key: 'seed_carrot', qty: 5 },
+      { icon: '🌼', name: 'Paket 5 Bibit Aster', shortName: 'Paket Aster', sub: 'Panen 4 hari • Jual 38 🪙/pcs', price: 28, key: 'seed_white', qty: 5 },
+      { icon: '🌹', name: 'Paket 5 Bibit Mawar', shortName: 'Paket Mawar', sub: 'Panen 5 hari • Jual 50 🪙/pcs', price: 35, key: 'seed_red', qty: 5 }
+    ];
+
+    const SHOP_TOOL_CATALOG = [
+      { key: 'hoe', icon: '⛏️', name: 'Cangkul Baja Pro', sub: 'Cangkul 4 petak (2×2) sekaligus hanya 1 ❤️', price: 60 },
+      { key: 'water', icon: '💧', name: 'Gembor Emas Otomatis', sub: 'Siram 4 petak (2×2) sekaligus hanya 1 ❤️', price: 75 },
+      { key: 'planter', icon: '🌱', name: 'Alat Tanam Cepat', sub: 'Tanam 4 petak (2×2) sekaligus hanya 1 ❤️', price: 70 },
+      { key: 'harvest', icon: '🧺', name: 'Sabit Panen Kilat', sub: 'Panen 4 petak (2×2) sekaligus hanya 1 ❤️', price: 85 }
+    ];
+
+    function getRodShopItem() {
+      if (!state.hasRod) {
+        return { key: 'rod', icon: '🎣', name: 'Pancing Kayu', sub: 'Buka alat pancing (tombol 8) untuk memancing di sungai (0 ❤️)!', price: 45, owned: false };
+      }
+      return { key: 'rod', icon: '🎣', name: 'Pancing Karbon Pro', sub: 'Zona tarik-ulur lebih lebar & peluang ikan langka/Jumbo tinggi!', price: 95, owned: state.upgrades.rod };
+    }
+
+    function getActiveToolCatalog() {
+      return [...SHOP_TOOL_CATALOG.map(t => ({ ...t, owned: state.upgrades[t.key] })), getRodShopItem()];
+    }
+
+    const SHOP_SELL_CATALOG = [
+      { key: 'cabbage', label: 'Kubis', icon: '🥬', unitPrice: 22 },
+      { key: 'carrot', label: 'Wortel', icon: '🥕', unitPrice: 30 },
+      { key: 'daisy', label: 'Aster', icon: '🌼', unitPrice: 38 },
+      { key: 'rose', label: 'Mawar', icon: '🌹', unitPrice: 50 }
+    ];
+
+    function isToolInTransit(toolKey) {
+      const checkOrder = (ord) => ord && (ord.upgradeKey === toolKey || (Array.isArray(ord.upgradeKeys) && ord.upgradeKeys.includes(toolKey)));
+      return checkOrder(courier.currentOrder) || courier.queue.some(checkOrder);
+    }
+
+    function getBuyCartSummary() {
+      let totalCost = 0;
+      let totalCount = 0;
+      const parts = [];
+
+      SHOP_SEED_CATALOG.forEach(item => {
+        const count = state.buyCart.seeds[item.key] || 0;
+        if (count > 0) {
+          totalCost += count * item.price;
+          totalCount += count;
+          parts.push(`${count}× ${item.icon} ${item.shortName}`);
+        }
+      });
+
+      getActiveToolCatalog().forEach(item => {
+        if (state.buyCart.tools[item.key] && !item.owned && !isToolInTransit(item.key)) {
+          totalCost += item.price;
+          totalCount += 1;
+          parts.push(`${item.icon} ${item.name}`);
+        }
+      });
+
+      return { totalCost, totalCount, parts };
+    }
+
+    function getSellCartSummary() {
+      let totalPayout = 0;
+      let totalQty = 0;
+      const parts = [];
+
+      SHOP_SELL_CATALOG.forEach(item => {
+        const qty = Math.min(state.sellCart[item.key] || 0, state.storage[item.key]);
+        if (qty > 0) {
+          totalPayout += qty * item.unitPrice;
+          totalQty += qty;
+          parts.push(`${qty} ${item.icon} ${item.label}`);
+        }
+      });
+
+      const fishQty = Math.min(state.sellCart.fish || 0, state.storage.fish.length);
+      if (fishQty > 0) {
+        let fishSum = 0;
+        for (let i = 0; i < fishQty; i++) fishSum += state.storage.fish[i].price;
+        totalPayout += fishSum;
+        totalQty += fishQty;
+        parts.push(`${fishQty} 🐟 Ikan`);
+      }
+
+      return { totalPayout, totalQty, parts };
+    }
+
+    function clearBuyCart() {
+      Object.keys(state.buyCart.seeds).forEach(k => { state.buyCart.seeds[k] = 0; });
+      Object.keys(state.buyCart.tools).forEach(k => { state.buyCart.tools[k] = false; });
+    }
+
+    function clearSellCart() {
+      Object.keys(state.sellCart).forEach(k => { state.sellCart[k] = 0; });
+    }
+
+    function confirmBuyCart() {
+      const summary = getBuyCartSummary();
+      if (summary.totalCount === 0) return;
+      if (state.coins < summary.totalCost) {
+        showToast('Koin tidak cukup untuk pesanan di keranjang!');
+        return;
+      }
+
+      const orderedSeeds = [];
+      SHOP_SEED_CATALOG.forEach(item => {
+        const count = state.buyCart.seeds[item.key] || 0;
+        if (count > 0) orderedSeeds.push({ key: item.key, addQty: count * item.qty });
+      });
+
+      const orderedTools = [];
+      getActiveToolCatalog().forEach(item => {
+        if (state.buyCart.tools[item.key] && !item.owned && !isToolInTransit(item.key)) {
+          orderedTools.push(item.key);
+        }
+      });
+
+      state.coins -= summary.totalCost;
+      clearBuyCart();
+      updateHUD();
+
+      const label = summary.parts.length <= 2 ? summary.parts.join(' & ') : `${summary.totalCount} item pesanan`;
+
+      queueCourierOrder({
+        kind: 'deliver',
+        label,
+        upgradeKeys: orderedTools,
+        onComplete: () => {
+          orderedSeeds.forEach(s => { state.storage[s.key] += s.addQty; });
+          orderedTools.forEach(tk => {
+            if (tk === 'rod') {
+              if (!state.hasRod) {
+                state.hasRod = true;
+                setTimeout(() => openFirstFishingGuide(), 450);
+              } else {
+                state.upgrades.rod = true;
+              }
+            } else {
+              state.upgrades[tk] = true;
+            }
+          });
+        }
+      });
+
+      closeAllModals();
+      showToast(`📱 Pembelian dikonfirmasi (${summary.totalCost} 🪙)! Kurir segera mengantar 🚚`);
+    }
+
+    function confirmSellCart() {
+      const summary = getSellCartSummary();
+      if (summary.totalQty === 0) return;
+
+      SHOP_SELL_CATALOG.forEach(item => {
+        const qty = Math.min(state.sellCart[item.key] || 0, state.storage[item.key]);
+        if (qty > 0) state.storage[item.key] -= qty;
+      });
+
+      const fishQty = Math.min(state.sellCart.fish || 0, state.storage.fish.length);
+      if (fishQty > 0) state.storage.fish.splice(0, fishQty);
+
+      const payout = summary.totalPayout;
+      const label = summary.parts.length <= 2 ? summary.parts.join(' & ') : `${summary.totalQty} hasil panen & pancing`;
+
+      clearSellCart();
+      updateHUD();
+
+      queueCourierOrder({
+        kind: 'pickup',
+        label,
+        payout,
+        onComplete: () => { state.coins += payout; }
+      });
+
+      closeAllModals();
+      showToast(`🚚 Penjualan dikonfirmasi! Kurir datang menjemput ${label} (+${payout} 🪙)`);
+    }
+
+    function renderCartSummary() {
+      if (state.shopTab === 'sell') {
+        const { totalPayout, totalQty, parts } = getSellCartSummary();
+        shopCartSummaryEl.innerHTML = `
+          <div class="cart-summary-header">
+            <span>📦 Keranjang Jual (${totalQty} pcs)</span>
+            <span style="color:#376b1b;">+${totalPayout} 🪙</span>
+          </div>
+          <div class="cart-summary-items">
+            ${parts.length > 0 ? parts.join(' • ') : 'Pilih jumlah hasil panen yang ingin dijual menggunakan tombol + atau Maks.'}
+          </div>
+          <div class="cart-summary-actions">
+            <button class="cart-clear-btn" id="btn-clear-cart" ${totalQty === 0 ? 'disabled' : ''}>Kosongkan</button>
+            <button class="cart-confirm-btn sell-confirm" id="btn-confirm-cart" ${totalQty === 0 ? 'disabled' : ''}>
+              ✅ Konfirmasi Jual (+${totalPayout} 🪙)
+            </button>
+          </div>
+        `;
+        shopCartSummaryEl.querySelector('#btn-clear-cart').addEventListener('click', () => { clearSellCart(); renderShopModal(); });
+        shopCartSummaryEl.querySelector('#btn-confirm-cart').addEventListener('click', confirmSellCart);
+      } else {
+        const { totalCost, totalCount, parts } = getBuyCartSummary();
+        const remaining = state.coins - totalCost;
+        const canAfford = totalCount > 0 && remaining >= 0;
+        shopCartSummaryEl.innerHTML = `
+          <div class="cart-summary-header">
+            <span>🛒 Keranjang Beli (${totalCount} item)</span>
+            <span>Total: ${totalCost} 🪙</span>
+          </div>
+          <div class="cart-summary-items">
+            ${parts.length > 0
+              ? `${parts.join(' • ')}<br/>Sisa saldo setelah beli: <strong>${remaining} 🪙</strong>`
+              : 'Tambahkan bibit atau alat canggih ke keranjang, lalu konfirmasi pembelian.'}
+          </div>
+          <div class="cart-summary-actions">
+            <button class="cart-clear-btn" id="btn-clear-cart" ${totalCount === 0 ? 'disabled' : ''}>Kosongkan</button>
+            <button class="cart-confirm-btn" id="btn-confirm-cart" ${!canAfford ? 'disabled' : ''}>
+              ✅ Konfirmasi Beli (${totalCost} 🪙)
+            </button>
+          </div>
+        `;
+        shopCartSummaryEl.querySelector('#btn-clear-cart').addEventListener('click', () => { clearBuyCart(); renderShopModal(); });
+        shopCartSummaryEl.querySelector('#btn-confirm-cart').addEventListener('click', confirmBuyCart);
+      }
+    }
+
+    function renderShopModal() {
+      SHOP_SELL_CATALOG.forEach(item => {
+        state.sellCart[item.key] = Math.min(state.sellCart[item.key] || 0, state.storage[item.key]);
+      });
+      state.sellCart.fish = Math.min(state.sellCart.fish || 0, state.storage.fish.length);
+      getActiveToolCatalog().forEach(item => {
+        if (item.owned || isToolInTransit(item.key)) state.buyCart.tools[item.key] = false;
+      });
+
+      shopCoinsEl.textContent = state.coins;
+      shopTabButtons.forEach(b => b.classList.toggle('active', b.dataset.shopTab === state.shopTab));
+      shopListEl.innerHTML = '';
+
+      const buySummary = getBuyCartSummary();
+
+      if (state.shopTab === 'seeds') {
+        SHOP_SEED_CATALOG.forEach(item => {
+          const inCart = state.buyCart.seeds[item.key] || 0;
+          const canAddMore = (buySummary.totalCost + item.price) <= state.coins;
+          const row = document.createElement('div');
+          row.className = 'item-row';
+          row.innerHTML = `
+            <div class="item-info">
+              <span class="item-icon">${item.icon}</span>
+              <div>
+                <div class="item-name">${item.name} • ${item.price} 🪙</div>
+                <div class="item-sub">${item.sub}</div>
+              </div>
+            </div>
+            <div class="qty-control">
+              <button class="qty-btn btn-minus" ${inCart <= 0 ? 'disabled' : ''}>−</button>
+              <span class="qty-val">${inCart}</span>
+              <button class="qty-btn btn-plus" ${!canAddMore ? 'disabled' : ''}>+</button>
+            </div>
+          `;
+          row.querySelector('.btn-minus').addEventListener('click', () => {
+            if (state.buyCart.seeds[item.key] > 0) { state.buyCart.seeds[item.key] -= 1; renderShopModal(); }
+          });
+          row.querySelector('.btn-plus').addEventListener('click', () => {
+            if (getBuyCartSummary().totalCost + item.price <= state.coins) { state.buyCart.seeds[item.key] += 1; renderShopModal(); }
+          });
+          shopListEl.appendChild(row);
+        });
+      } else if (state.shopTab === 'tools') {
+        getActiveToolCatalog().forEach(item => {
+          const owned = item.owned;
+          const inQueue = isToolInTransit(item.key);
+          const inCart = !!state.buyCart.tools[item.key];
+          const canAdd = !owned && !inQueue && (inCart || (buySummary.totalCost + item.price) <= state.coins);
+
+          const row = document.createElement('div');
+          row.className = 'item-row';
+          const btnClass = owned || inQueue ? 'owned-btn' : (inCart ? 'in-cart-btn' : '');
+          const btnText = owned ? 'Dimiliki ✓' : (inQueue ? 'Diantar 🚚' : (inCart ? 'Di Keranjang ✓' : `+ ${item.price} 🪙`));
+
+          row.innerHTML = `
+            <div class="item-info">
+              <span class="item-icon">${item.icon}</span>
+              <div>
+                <div class="item-name">${item.name}</div>
+                <div class="item-sub">${item.sub}</div>
+              </div>
+            </div>
+            <button class="item-action-btn ${btnClass}" ${owned || inQueue || !canAdd ? 'disabled' : ''}>${btnText}</button>
+          `;
+          if (!owned && !inQueue) {
+            row.querySelector('button').addEventListener('click', () => {
+              if (state.buyCart.tools[item.key]) state.buyCart.tools[item.key] = false;
+              else if (getBuyCartSummary().totalCost + item.price <= state.coins) state.buyCart.tools[item.key] = true;
+              renderShopModal();
+            });
+          }
+          shopListEl.appendChild(row);
+        });
+      } else if (state.shopTab === 'sell') {
+        SHOP_SELL_CATALOG.forEach(item => {
+          const stock = state.storage[item.key];
+          const qty = Math.min(state.sellCart[item.key] || 0, stock);
+          const row = document.createElement('div');
+          row.className = 'item-row';
+          row.innerHTML = `
+            <div class="item-info">
+              <span class="item-icon">${item.icon}</span>
+              <div>
+                <div class="item-name">${item.label} (Stok: ${stock} pcs)</div>
+                <div class="item-sub">${item.unitPrice} 🪙/pcs${qty > 0 ? ` • Subtotal: +${qty * item.unitPrice} 🪙` : ''}</div>
+              </div>
+            </div>
+            <div class="qty-control">
+              <button class="qty-btn btn-minus" ${qty <= 0 ? 'disabled' : ''}>−</button>
+              <span class="qty-val">${qty}</span>
+              <button class="qty-btn btn-plus" ${qty >= stock ? 'disabled' : ''}>+</button>
+              <button class="qty-max-btn btn-max" ${stock <= 0 || qty === stock ? 'disabled' : ''}>Maks</button>
+            </div>
+          `;
+          row.querySelector('.btn-minus').addEventListener('click', () => {
+            if (state.sellCart[item.key] > 0) { state.sellCart[item.key] -= 1; renderShopModal(); }
+          });
+          row.querySelector('.btn-plus').addEventListener('click', () => {
+            if (state.sellCart[item.key] < state.storage[item.key]) { state.sellCart[item.key] += 1; renderShopModal(); }
+          });
+          row.querySelector('.btn-max').addEventListener('click', () => {
+            state.sellCart[item.key] = state.storage[item.key]; renderShopModal();
+          });
+          shopListEl.appendChild(row);
+        });
+
+        const fishStock = state.storage.fish.length;
+        const fishQty = Math.min(state.sellCart.fish || 0, fishStock);
+        let fishSubtotal = 0;
+        for (let i = 0; i < fishQty; i++) fishSubtotal += state.storage.fish[i].price;
+        const totalFishVal = state.storage.fish.reduce((s, f) => s + f.price, 0);
+        const fishRow = document.createElement('div');
+        fishRow.className = 'item-row';
+        fishRow.innerHTML = `
+          <div class="item-info">
+            <span class="item-icon">🐟</span>
+            <div>
+              <div class="item-name">Ikan Sungai (Stok: ${fishStock} ekor)</div>
+              <div class="item-sub">${fishStock > 0 ? `Total nilai: ${totalFishVal} 🪙` : 'Belum ada ikan hasil pancing'}${fishQty > 0 ? ` • Dipilih: +${fishSubtotal} 🪙` : ''}</div>
+            </div>
+          </div>
+          <div class="qty-control">
+            <button class="qty-btn btn-minus" ${fishQty <= 0 ? 'disabled' : ''}>−</button>
+            <span class="qty-val">${fishQty}</span>
+            <button class="qty-btn btn-plus" ${fishQty >= fishStock ? 'disabled' : ''}>+</button>
+            <button class="qty-max-btn btn-max" ${fishStock <= 0 || fishQty === fishStock ? 'disabled' : ''}>Maks</button>
+          </div>
+        `;
+        fishRow.querySelector('.btn-minus').addEventListener('click', () => {
+          if (state.sellCart.fish > 0) { state.sellCart.fish -= 1; renderShopModal(); }
+        });
+        fishRow.querySelector('.btn-plus').addEventListener('click', () => {
+          if (state.sellCart.fish < state.storage.fish.length) { state.sellCart.fish += 1; renderShopModal(); }
+        });
+        fishRow.querySelector('.btn-max').addEventListener('click', () => {
+          state.sellCart.fish = state.storage.fish.length; renderShopModal();
+        });
+        shopListEl.appendChild(fishRow);
+      }
+
+      renderCartSummary();
+    }
+
+    function openShopModal(tab = 'seeds') {
+      closeAllModals();
+      state.shopTab = tab;
+      state.isPaused = true;
+      renderShopModal();
+      shopModalEl.classList.add('open');
+    }
+
+    document.getElementById('btn-open-storage').addEventListener('click', openStorageModal);
+    document.getElementById('btn-open-shop').addEventListener('click', () => openShopModal('seeds'));
+    btnCloseStorage.addEventListener('click', closeAllModals);
+    btnCloseShop.addEventListener('click', closeAllModals);
+    btnStorageToShop.addEventListener('click', () => openShopModal('sell'));
+
+    shopTabButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.shopTab = btn.dataset.shopTab;
+        renderShopModal();
+      });
+    });
+
+    function consumeEnergy(cost) {
+      if (state.energy < cost) {
+        showToast('Tenaga habis! Istirahat atau tidur di rumah petani 🏠');
+        return false;
+      }
+      state.energy = Math.max(0, state.energy - cost);
+      updateHUD();
+      if (state.energy === 0) showToast('Tenagamu sudah kosong! Kembali ke rumah untuk beristirahat 🏠');
+      return true;
+    }
+
+    function openHouseModal() {
+      state.isPaused = true;
+      farmer.waypoints = [];
+      farmer.pendingAction = null;
+      targetRing.visible = false;
+
+      const info = getTimeInfo(state.timeMinutes);
+      const sleepInfo = getSleepRecoveryInfo();
+      modalTimeEl.textContent = `${info.clockStr} (${info.phase})`;
+      modalEnergyEl.textContent = `${state.energy} / ${state.maxEnergy} Hati`;
+      modalSleepPreviewEl.textContent = sleepInfo.note;
+
+      btnRestHour.disabled = state.energy >= state.maxEnergy;
+      btnRestHour.textContent = state.energy >= state.maxEnergy
+        ? '☕ Tenaga Sudah Penuh (10/10 ❤️)'
+        : '☕ Istirahat 1 Jam (+2 ❤️)';
+
+      houseModalEl.classList.add('open');
+    }
+
+    function closeHouseModal() {
+      houseModalEl.classList.remove('open');
+      state.isPaused = false;
+    }
+
+    function showReportModal(title, desc, detailsHtml) {
+      state.isPaused = true;
+      reportTitleEl.textContent = title;
+      reportDescEl.textContent = desc;
+      reportDetailsEl.innerHTML = detailsHtml;
+      reportModalEl.classList.add('open');
+    }
+
+    btnCloseReport.addEventListener('click', () => {
+      reportModalEl.classList.remove('open');
+      state.isPaused = false;
+    });
+    btnCloseHouse.addEventListener('click', closeHouseModal);
+
+    btnRestHour.addEventListener('click', () => {
+      if (state.energy >= state.maxEnergy) return;
+      state.timeMinutes += 60;
+      state.hoursAwake += 1;
+      const before = state.energy;
+      state.energy = Math.min(state.maxEnergy, state.energy + 2);
+      const gained = state.energy - before;
+      updateHUD();
+      updateDayNightCycle(0);
+
+      if (state.hoursAwake >= 24) {
+        houseModalEl.classList.remove('open');
+        triggerSickness();
+        return;
+      }
+
+      closeHouseModal();
+      spawnHeart(farmer.x, 1.5, farmer.z, 2);
+      showToast(`Istirahat 1 jam selesai! Tenaga pulih +${gained} ❤️`);
+    });
+
+    btnSleepNight.addEventListener('click', () => {
+      const sleepInfo = getSleepRecoveryInfo();
+      houseModalEl.classList.remove('open');
+      state.isPaused = true;
+      dayFadeEl.classList.add('active');
+
+      setTimeout(() => {
+        state.day += 1;
+        state.timeMinutes = 6 * 60;
+        state.hoursAwake = 0;
+        state.warnedLate = false;
+        state.warnedVeryLate = false;
+        state.energy = sleepInfo.hearts;
+
+        let grownCount = 0;
+        let readyCount = 0;
+        tiles.forEach(tile => {
+          if (tile.state === 'planted' && tile.cropType && tile.watered) {
+            const crop = CROPS[tile.cropType];
+            if (tile.wateredDays < crop.daysToGrow) {
+              tile.wateredDays += 1;
+              tile.stage = computeCropStage(tile);
+              grownCount++;
+              if (tile.stage === 2) readyCount++;
+            }
+          }
+          tile.watered = false;
+          refreshTileVisual(tile);
+        });
+
+        rollWeatherForNewDay();
+        applyRainToTiles();
+
+        farmer.x = HOUSE_DOOR.x;
+        farmer.z = HOUSE_DOOR.z;
+        farmer.group.position.set(farmer.x, 0, farmer.z);
+        farmer.group.rotation.y = 0;
+        farmer.waypoints = [];
+        farmer.pendingAction = null;
+
+        updateHUD();
+        updateDayNightCycle(0);
+        dayFadeEl.classList.remove('active');
+
+        const isLate = sleepInfo.hearts < state.maxEnergy;
+        const rainReport = state.weather === 'rainy'
+          ? '<div>🌧️ Cuaca: <strong>Hujan!</strong> Semua petak otomatis tersiram hari ini.</div>'
+          : '<div>☀️ Cuaca: <strong>Cerah</strong> — jangan lupa siram tanamanmu!</div>';
+
+        showReportModal(
+          isLate ? `🥱 Pagi Hari ke-${state.day} (Kurang Tidur)` : `🌅 Selamat Pagi — Hari ke-${state.day}`,
+          isLate
+            ? 'Semalam kamu tidur terlalu larut, jadi tenagamu belum pulih sepenuhnya.'
+            : 'Tidurmu sangat nyenyak! Kamu bangun pagi dengan tenaga penuh.',
+          `<div>❤️ Tenaga Pagi Ini: <strong>${state.energy} / ${state.maxEnergy} Hati</strong></div>
+           <div>🌱 Tanaman Tumbuh: <strong>${grownCount} petak</strong>${readyCount > 0 ? ` (${readyCount} siap panen!)` : ''}</div>
+           ${rainReport}`
+        );
+      }, 480);
+    });
+
+    function triggerSickness() {
+      state.isPaused = true;
+      farmer.waypoints = [];
+      farmer.pendingAction = null;
+      targetRing.visible = false;
+      dayFadeEl.classList.add('active');
+
+      setTimeout(() => {
+        const missedDay = state.day + 1;
+        state.day += 2;
+        state.timeMinutes = 6 * 60;
+        state.hoursAwake = 0;
+        state.warnedLate = false;
+        state.warnedVeryLate = false;
+        state.energy = 6;
+
+        let plantedCount = 0;
+        tiles.forEach(tile => {
+          if (tile.state === 'planted') plantedCount++;
+          tile.watered = false;
+          refreshTileVisual(tile);
+        });
+
+        rollWeatherForNewDay();
+        applyRainToTiles();
+
+        farmer.x = HOUSE_DOOR.x;
+        farmer.z = HOUSE_DOOR.z;
+        farmer.group.position.set(farmer.x, 0, farmer.z);
+        farmer.group.rotation.y = 0;
+
+        updateHUD();
+        updateDayNightCycle(0);
+        dayFadeEl.classList.remove('active');
+
+        showReportModal(
+          '🤒 Kamu Jatuh Sakit!',
+          `Karena seharian tidak tidur, kamu kelelahan dan harus istirahat total. Hari ke-${missedDay} terlewat dan seluruh tanaman tidak sempat disiram.`,
+          `<div>📅 Sekarang: <strong>Hari ke-${state.day} (06:00 Pagi)</strong></div>
+           <div>🥀 Tanaman Tidak Disiram: <strong>${plantedCount} petak mengering</strong></div>
+           <div>❤️ Tenaga Saat Bangun: <strong>${state.energy} / ${state.maxEnergy} Hati</strong></div>
+           <div>${state.weather === 'rainy' ? '🌧️ Hari ini turun <strong>Hujan</strong> (petak otomatis basah).' : '☀️ Cuaca hari ini <strong>Cerah</strong>.'}</div>`
+        );
+      }, 520);
+    }
+
+    const timeKeyframes = [
+      { h: 0,    bg: 0x1d2742, hemiSky: 0x3b4d7a, hemiGnd: 0x1e2230, hemiInt: 0.62, sunCol: 0x7b98d9, sunInt: 0.35, sx: -12, sy: 18, sz: -10 },
+      { h: 5,    bg: 0x5c6885, hemiSky: 0xd9a89a, hemiGnd: 0x5c534c, hemiInt: 0.85, sunCol: 0xffb380, sunInt: 0.55, sx: 22,  sy: 10, sz: 14 },
+      { h: 7.5,  bg: 0x96bf5c, hemiSky: 0xfff5de, hemiGnd: 0xc7954b, hemiInt: 1.32, sunCol: 0xffefc2, sunInt: 1.12, sx: 18,  sy: 24, sz: 14 },
+      { h: 12.5, bg: 0x9ec962, hemiSky: 0xffffff, hemiGnd: 0xcfa45a, hemiInt: 1.45, sunCol: 0xfff9e6, sunInt: 1.28, sx: 8,   sy: 32, sz: 10 },
+      { h: 16.5, bg: 0xa6a858, hemiSky: 0xffd7a3, hemiGnd: 0xb87a3d, hemiInt: 1.22, sunCol: 0xffa652, sunInt: 1.05, sx: -14, sy: 18, sz: 12 },
+      { h: 18.5, bg: 0x5c586e, hemiSky: 0xc77d6b, hemiGnd: 0x4f3e3b, hemiInt: 0.82, sunCol: 0xff7747, sunInt: 0.52, sx: -22, sy: 9,  sz: 12 },
+      { h: 20.5, bg: 0x24304f, hemiSky: 0x455887, hemiGnd: 0x222738, hemiInt: 0.65, sunCol: 0x82a0e0, sunInt: 0.38, sx: -15, sy: 18, sz: -8 },
+      { h: 24,   bg: 0x1d2742, hemiSky: 0x3b4d7a, hemiGnd: 0x1e2230, hemiInt: 0.62, sunCol: 0x7b98d9, sunInt: 0.35, sx: -12, sy: 18, sz: -10 }
+    ];
+
+    const tmpColorA = new THREE.Color();
+    const tmpColorB = new THREE.Color();
+
+    function lerpHexColor(targetColor, hexA, hexB, t) {
+      tmpColorA.setHex(hexA);
+      tmpColorB.setHex(hexB);
+      targetColor.copy(tmpColorA).lerp(tmpColorB, t);
+    }
+
+    function updateDayNightCycle(dt) {
+      if (!state.isPaused && dt > 0) {
+        const addedMinutes = dt * 4.0;
+        state.timeMinutes += addedMinutes;
+        state.hoursAwake += addedMinutes / 60;
+
+        if (state.hoursAwake >= 17 && !state.warnedLate) {
+          state.warnedLate = true;
+          showToast('🌙 Sudah larut malam (23:00)! Segera tidur di rumah agar tenaga pulih penuh.');
+        }
+        if (state.hoursAwake >= 21 && !state.warnedVeryLate) {
+          state.warnedVeryLate = true;
+          showToast('🤒 Mata mulai berat! Tidur di rumah sekarang sebelum jatuh sakit!');
+        }
+        if (state.hoursAwake >= 24) {
+          triggerSickness();
+          return;
+        }
+      }
+
+      const info = getTimeInfo(state.timeMinutes);
+      const hr = info.hourFloat;
+
+      let kA = timeKeyframes[0];
+      let kB = timeKeyframes[timeKeyframes.length - 1];
+      for (let i = 0; i < timeKeyframes.length - 1; i++) {
+        if (hr >= timeKeyframes[i].h && hr <= timeKeyframes[i + 1].h) {
+          kA = timeKeyframes[i];
+          kB = timeKeyframes[i + 1];
+          break;
+        }
+      }
+      const span = Math.max(0.001, kB.h - kA.h);
+      const t = THREE.MathUtils.clamp((hr - kA.h) / span, 0, 1);
+
+      lerpHexColor(scene.background, kA.bg, kB.bg, t);
+      lerpHexColor(hemiLight.color, kA.hemiSky, kB.hemiSky, t);
+      lerpHexColor(hemiLight.groundColor, kA.hemiGnd, kB.hemiGnd, t);
+      hemiLight.intensity = THREE.MathUtils.lerp(kA.hemiInt, kB.hemiInt, t);
+
+      lerpHexColor(sunLight.color, kA.sunCol, kB.sunCol, t);
+      sunLight.intensity = THREE.MathUtils.lerp(kA.sunInt, kB.sunInt, t);
+
+      if (state.weather === 'rainy') {
+        tmpColorA.setHex(0x6c808f);
+        scene.background.lerp(tmpColorA, 0.42);
+        hemiLight.color.lerp(tmpColorA, 0.35);
+        sunLight.intensity *= 0.62;
+      }
+
+      sunLight.position.set(
+        THREE.MathUtils.lerp(kA.sx, kB.sx, t),
+        THREE.MathUtils.lerp(kA.sy, kB.sy, t),
+        THREE.MathUtils.lerp(kA.sz, kB.sz, t)
+      );
+
+      let nightFactor = 0;
+      if (hr >= 17.5) nightFactor = THREE.MathUtils.clamp((hr - 17.5) / 1.8, 0, 1);
+      else if (hr < 6.0) nightFactor = THREE.MathUtils.clamp((6.0 - hr) / 1.5, 0, 1);
+
+      if (porchLight) porchLight.intensity = nightFactor * 3.4;
+      if (lanternMat) lanternMat.emissiveIntensity = nightFactor * 1.5;
+      windowGlowMaterials.forEach(mat => { mat.emissiveIntensity = nightFactor * 1.2; });
+
+      uiClock.textContent = info.clockStr;
+      uiPhase.textContent = info.phase;
+      uiPhaseIcon.textContent = info.icon;
+
+      return nightFactor;
+    }
+
+    function getTargetTiles(centerTile, isUpgraded) {
+      if (!isUpgraded) return [centerTile];
+      const result = [];
+      for (let dr = 0; dr <= 1; dr++) {
+        for (let dc = 0; dc <= 1; dc++) {
+          const r = centerTile.row + dr;
+          const c = centerTile.col + dc;
+          if (r >= 0 && r < GRID_ROWS && c >= 0 && c < GRID_COLS) {
+            result.push(tiles[r * GRID_COLS + c]);
+          }
+        }
+      }
+      return result;
+    }
+
+    function handleTileAction(tile) {
+      if (state.tool === 'hoe') {
+        const area = getTargetTiles(tile, state.upgrades.hoe).filter(t => t.state === 'empty');
+        if (area.length > 0) {
+          if (!consumeEnergy(1)) return;
+          farmer.actionAnim = 1.0;
+          area.forEach(t => {
+            t.state = 'tilled';
+            t.watered = state.weather === 'rainy';
+            refreshTileVisual(t);
+            spawnBurst(t.wx, 0.2, t.wz, 0x9c6e3b, 7);
+          });
+          state.tutorial.tilled = true;
+          advanceTutorialIfReady();
+          if (area.length > 1) showToast(`⛏️ Cangkul Baja mencangkul ${area.length} petak dengan 1 ❤️!`);
+        } else {
+          showToast('Tanah ini sudah dicangkul.');
+        }
+      } else if (SEED_TOOL_TO_CROP[state.tool]) {
+        const seedKey = state.tool;
+        const cropKey = SEED_TOOL_TO_CROP[seedKey];
+        const crop = CROPS[cropKey];
+        const area = getTargetTiles(tile, state.upgrades.planter).filter(t => t.state === 'tilled');
+        if (area.length === 0) {
+          showToast(tile.state === 'empty' ? 'Cangkul tanahnya dulu!' : 'Petak ini sudah ada tanamannya.');
+          return;
+        }
+        if (state.storage[seedKey] <= 0) {
+          showToast(`Bibit ${crop.name} habis! Pesan di 📱 Toko Online.`);
+          return;
+        }
+        if (!consumeEnergy(1)) return;
+        farmer.actionAnim = 1.0;
+        let plantedCount = 0;
+        for (const t of area) {
+          if (state.storage[seedKey] <= 0) break;
+          state.storage[seedKey] -= 1;
+          t.state = 'planted';
+          t.cropType = cropKey;
+          t.wateredDays = 0;
+          t.stage = 0;
+          if (state.weather === 'rainy') t.watered = true;
+          refreshTileVisual(t);
+          spawnBurst(t.wx, 0.25, t.wz, 0x7cb342, 6);
+          plantedCount++;
+        }
+        state.tutorial.planted = true;
+        if (state.weather === 'rainy') state.tutorial.watered = true;
+        showToast(
+          state.weather === 'rainy'
+            ? `${crop.icon} ${crop.name} ditanam & otomatis tersiram hujan! 🌧️`
+            : (plantedCount > 1
+              ? `${crop.icon} Menanam ${plantedCount} ${crop.name} (panen ${crop.daysToGrow} hari) dengan 1 ❤️!`
+              : `${crop.icon} ${crop.name} ditanam! Siram setiap hari (${crop.daysToGrow} hari siap panen).`)
+        );
+        updateHUD();
+        advanceTutorialIfReady();
+      } else if (state.tool === 'water') {
+        if (state.weather === 'rainy') {
+          showToast('🌧️ Hari ini sedang hujan! Semua petak otomatis basah, tidak perlu disiram.');
+          return;
+        }
+        const area = getTargetTiles(tile, state.upgrades.water).filter(t => t.state !== 'empty' && !t.watered);
+        if (area.length === 0) {
+          showToast(tile.state === 'empty' ? 'Cangkul dan tanam benih dulu sebelum menyiram.' : 'Petak ini sudah disiram hari ini.');
+          return;
+        }
+        if (!consumeEnergy(1)) return;
+        farmer.actionAnim = 1.0;
+        area.forEach(t => {
+          t.watered = true;
+          refreshTileVisual(t);
+          spawnBurst(t.wx, 0.3, t.wz, 0x64b5f6, 8);
+        });
+        state.tutorial.watered = true;
+        advanceTutorialIfReady();
+        showToast(area.length > 1 ? `💧 Gembor Emas menyiram ${area.length} petak dengan 1 ❤️!` : 'Tanah disiram! Tidur malam agar tanaman tumbuh keesokan harinya 💧');
+      } else if (state.tool === 'harvest') {
+        const area = getTargetTiles(tile, state.upgrades.harvest).filter(t => t.state === 'planted' && t.stage === 2);
+        if (area.length > 0) {
+          if (!consumeEnergy(1)) return;
+          farmer.actionAnim = 1.0;
+          area.forEach(t => {
+            const crop = CROPS[t.cropType];
+            state.storage[crop.storageKey] += 1;
+            if (state.tutorial.active && state.tutorial.step === 0) state.tutorial.harvestedInit += 1;
+            spawnHeart(t.wx, 1.0, t.wz, 1);
+            spawnBurst(t.wx, 0.45, t.wz, crop.burstColor, 8);
+            t.state = 'tilled';
+            t.cropType = null;
+            t.wateredDays = 0;
+            t.stage = 0;
+            t.watered = state.weather === 'rainy';
+            refreshTileVisual(t);
+          });
+          showToast(`📦 Panen ${area.length} hasil tani masuk Gudang! Jual di 📱 Toko Online.`);
+          updateHUD();
+          advanceTutorialIfReady();
+        } else if (tile.state === 'planted' && tile.cropType) {
+          const crop = CROPS[tile.cropType];
+          const remaining = Math.max(1, crop.daysToGrow - tile.wateredDays);
+          showToast(`${crop.icon} ${crop.name}: ${tile.wateredDays}/${crop.daysToGrow} hari disiram (butuh ${remaining} hari lagi).`);
+        } else {
+          showToast('Belum ada tanaman yang siap panen di petak ini.');
+        }
+      }
+    }
+
+    function petAnimal(animalObj) {
+      farmer.actionAnim = 1.0;
+      if (animalObj.isSleeping) {
+        spawnZzz(animalObj.group.position.x, 1.05, animalObj.group.position.z);
+        showToast(`${animalObj.name} sedang tidur pulas... 💤`);
+        return;
+      }
+      animalObj.happyBounce = 1.0;
+      spawnHeart(animalObj.group.position.x, 1.15, animalObj.group.position.z, 3);
+      showToast(`${animalObj.name} senang kamu elus! 💕`);
+    }
+
+    function getNearestTile(maxDist = 1.05) {
+      let best = null;
+      let bestD = maxDist;
+      for (const t of tiles) {
+        const d = Math.hypot(t.wx - farmer.x, t.wz - farmer.z);
+        if (d < bestD) { bestD = d; best = t; }
+      }
+      return best;
+    }
+
+    function getNearestAnimal(maxDist = 1.55) {
+      let best = null;
+      let bestD = maxDist;
+      for (const a of animals) {
+        const d = Math.hypot(a.group.position.x - farmer.x, a.group.position.z - farmer.z);
+        if (d < bestD) { bestD = d; best = a; }
+      }
+      return best;
+    }
+
+    const keys = {};
+    window.addEventListener('keydown', (e) => {
+      if (state.isPaused) {
+        if (e.code === 'Escape') closeAllModals();
+        return;
+      }
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+        e.preventDefault();
+      }
+      keys[e.code] = true;
+
+      const map = { '1': 'hoe', '2': 'seed_cabbage', '3': 'seed_carrot', '4': 'seed_white', '5': 'seed_red', '6': 'water', '7': 'harvest' };
+      if (map[e.key]) selectTool(map[e.key]);
+      if (e.key === '8' && state.hasRod) selectTool('rod');
+
+      if (e.code === 'Space' || e.code === 'Enter') {
+        if (fishing.active) {
+          reelInFish();
+          return;
+        }
+        const distHouse = Math.hypot(HOUSE_DOOR.x - farmer.x, HOUSE_DOOR.z - farmer.z);
+        const nearTile = getNearestTile(1.05);
+        const nearAnimal = getNearestAnimal(1.55);
+        if (distHouse < 1.65) {
+          openHouseModal();
+        } else if (farmer.z >= 4.25 && state.tool === 'rod' && state.hasRod) {
+          startFishing(farmer.x, 6.25);
+        } else if (nearTile) {
+          handleTileAction(nearTile);
+        } else if (nearAnimal) {
+          petAnimal(nearAnimal);
+        } else {
+          showToast('Dekati petak lahan, hewan, tepi sungai, atau pintu rumah petani!');
+        }
+      }
+    });
+
+    window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+    document.getElementById('btn-go-home').addEventListener('click', () => {
+      if (state.isPaused) return;
+      const dist = Math.hypot(HOUSE_DOOR.x - farmer.x, HOUSE_DOOR.z - farmer.z);
+      if (dist < 1.35) {
+        openHouseModal();
+      } else {
+        setFarmerRoute(HOUSE_DOOR.x, HOUSE_DOOR.z, { type: 'house' });
+        targetRing.position.set(HOUSE_DOOR.x, 0.08, HOUSE_DOOR.z);
+        targetRing.visible = true;
+        showToast('Berjalan menuju rumah petani 🏠');
+      }
+    });
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+
+    function updatePointer(clientX, clientY) {
+      pointer.x = (clientX / window.innerWidth) * 2 - 1;
+      pointer.y = -(clientY / window.innerHeight) * 2 + 1;
+    }
+
+    renderer.domElement.addEventListener('pointermove', (e) => {
+      if (state.isPaused) return;
+      updatePointer(e.clientX, e.clientY);
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(tileMeshes);
+      if (hits.length > 0) {
+        const t = hits[0].object.userData.tile;
+        hoverBox.position.set(t.wx, 0.08, t.wz);
+        hoverBox.visible = true;
+        document.body.style.cursor = 'pointer';
+      } else {
+        hoverBox.visible = false;
+        const otherHits = raycaster.intersectObjects([...clickableAnimals, ...clickableHouse, ...clickableRiver]);
+        document.body.style.cursor = otherHits.length > 0 ? 'pointer' : 'default';
+      }
+    });
+
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      if (state.isPaused) return;
+      if (fishing.active) {
+        reelInFish();
+        return;
+      }
+      updatePointer(e.clientX, e.clientY);
+      raycaster.setFromCamera(pointer, camera);
+
+      const houseHits = raycaster.intersectObjects(clickableHouse);
+      if (houseHits.length > 0) {
+        const hitType = houseHits[0].object.userData.type;
+        if (hitType === 'storage') {
+          setFarmerRoute(HOUSE.x + 2.35, HOUSE_DOOR.z, { type: 'storage' });
+          targetRing.position.set(HOUSE.x + 2.35, 0.08, HOUSE_DOOR.z);
+          targetRing.visible = true;
+        } else {
+          setFarmerRoute(HOUSE_DOOR.x, HOUSE_DOOR.z, { type: 'house' });
+          targetRing.position.set(HOUSE_DOOR.x, 0.08, HOUSE_DOOR.z);
+          targetRing.visible = true;
+        }
+        return;
+      }
+
+      const animalHits = raycaster.intersectObjects(clickableAnimals);
+      if (animalHits.length > 0) {
+        const animalObj = animalHits[0].object.userData.animalObj;
+        setFarmerRoute(animalObj.group.position.x, animalObj.group.position.z, { type: 'animal', animalObj });
+        targetRing.visible = false;
+        return;
+      }
+
+      const tileHits = raycaster.intersectObjects(tileMeshes);
+      if (tileHits.length > 0) {
+        const tile = tileHits[0].object.userData.tile;
+        setFarmerRoute(tile.wx, tile.wz, { type: 'tile', tile });
+        targetRing.position.set(tile.wx, 0.1, tile.wz);
+        targetRing.visible = true;
+        return;
+      }
+
+      const riverHits = raycaster.intersectObjects(clickableRiver);
+      if (riverHits.length > 0) {
+        if (!state.hasRod) {
+          showToast('Kamu belum punya alat pancing! Beli 🎣 Pancing Kayu di 📱 Toko Online → Alat Canggih.');
+          return;
+        }
+        selectTool('rod');
+        const pt = riverHits[0].point;
+        const bankX = THREE.MathUtils.clamp(pt.x, -7.8, 8.8);
+        const bankZ = 4.82;
+        setFarmerRoute(bankX, bankZ, { type: 'fish', waterX: bankX, waterZ: THREE.MathUtils.clamp(pt.z, 5.85, 7.55) });
+        targetRing.position.set(bankX, 0.08, bankZ);
+        targetRing.visible = true;
+        return;
+      }
+
+      const groundHits = raycaster.intersectObjects([farmGround, outerGround]);
+      if (groundHits.length > 0) {
+        const pt = groundHits[0].point;
+        const cx = THREE.MathUtils.clamp(pt.x, WORLD_LIMIT.minX + 0.3, WORLD_LIMIT.maxX - 0.3);
+        const cz = THREE.MathUtils.clamp(pt.z, WORLD_LIMIT.minZ + 0.3, WORLD_LIMIT.maxZ - 0.15);
+        setFarmerRoute(cx, cz, null);
+        targetRing.position.set(cx, 0.08, cz);
+        targetRing.visible = true;
+      }
+    });
+
+    // =========================================================
+    // 13. LOOP ANIMASI UTAMA
+    // =========================================================
+    const clock = new THREE.Clock();
+
+    function updateFarmer(dt) {
+      let moveX = 0;
+      let moveZ = 0;
+      const up = keys['ArrowUp'] || keys['KeyW'];
+      const down = keys['ArrowDown'] || keys['KeyS'];
+      const left = keys['ArrowLeft'] || keys['KeyA'];
+      const right = keys['ArrowRight'] || keys['KeyD'];
+
+      if (up)    { moveX -= 1; moveZ -= 1; }
+      if (down)  { moveX += 1; moveZ += 1; }
+      if (left)  { moveX -= 1; moveZ += 1; }
+      if (right) { moveX += 1; moveZ -= 1; }
+
+      let isMoving = false;
+
+      if (moveX !== 0 || moveZ !== 0) {
+        if (fishing.active && fishing.phase !== 'caught') stopFishing();
+        farmer.waypoints = [];
+        farmer.pendingAction = null;
+        targetRing.visible = false;
+
+        const len = Math.hypot(moveX, moveZ);
+        const nx = moveX / len;
+        const nz = moveZ / len;
+        farmer.x += nx * farmer.speed * dt;
+        farmer.z += nz * farmer.speed * dt;
+        farmer.group.rotation.y = Math.atan2(nx, nz);
+        isMoving = true;
+      } else if (farmer.waypoints.length > 0) {
+        const isLast = farmer.waypoints.length === 1;
+        const wp = farmer.waypoints[0];
+
+        if (isLast && farmer.pendingAction && farmer.pendingAction.type === 'animal') {
+          const ag = farmer.pendingAction.animalObj.group.position;
+          wp.x = ag.x;
+          wp.z = ag.z;
+        }
+
+        const dx = wp.x - farmer.x;
+        const dz = wp.z - farmer.z;
+        const dist = Math.hypot(dx, dz);
+        const stopDist = isLast
+          ? (farmer.pendingAction?.type === 'animal' ? 1.15 : (farmer.pendingAction?.type === 'tile' ? 0.65 : ((farmer.pendingAction?.type === 'house' || farmer.pendingAction?.type === 'storage' || farmer.pendingAction?.type === 'fish') ? 0.65 : 0.18)))
+          : 0.25;
+
+        if (dist > stopDist) {
+          const step = Math.min(dist, farmer.speed * dt);
+          farmer.x += (dx / dist) * step;
+          farmer.z += (dz / dist) * step;
+          farmer.group.rotation.y = Math.atan2(dx, dz);
+          isMoving = true;
+        } else {
+          farmer.waypoints.shift();
+          if (farmer.waypoints.length === 0) {
+            if (farmer.pendingAction) {
+              if (farmer.pendingAction.type === 'tile') {
+                const t = farmer.pendingAction.tile;
+                farmer.group.rotation.y = Math.atan2(t.wx - farmer.x, t.wz - farmer.z);
+                handleTileAction(t);
+              } else if (farmer.pendingAction.type === 'animal') {
+                const a = farmer.pendingAction.animalObj;
+                farmer.group.rotation.y = Math.atan2(a.group.position.x - farmer.x, a.group.position.z - farmer.z);
+                petAnimal(a);
+              } else if (farmer.pendingAction.type === 'house') {
+                openHouseModal();
+              } else if (farmer.pendingAction.type === 'storage') {
+                openStorageModal();
+              } else if (farmer.pendingAction.type === 'fish') {
+                startFishing(farmer.pendingAction.waterX, farmer.pendingAction.waterZ);
+              }
+            }
+            farmer.pendingAction = null;
+            targetRing.visible = false;
+          }
+        }
+      }
+
+      if (farmer.rodMesh) {
+        farmer.rodMesh.visible = state.hasRod && state.tool === 'rod';
+      }
+
+      resolveFarmerCollisions();
+      farmer.group.position.x = farmer.x;
+      farmer.group.position.z = farmer.z;
+
+      if (isMoving) {
+        farmer.walkPhase += dt * 13;
+        const swing = Math.sin(farmer.walkPhase) * 0.55;
+        farmer.leftLeg.rotation.x = swing;
+        farmer.rightLeg.rotation.x = -swing;
+        farmer.leftArm.rotation.x = -swing * 0.7;
+        farmer.rightArm.rotation.x = swing * 0.7;
+        farmer.group.position.y = Math.abs(Math.sin(farmer.walkPhase)) * 0.1;
+      } else {
+        farmer.leftLeg.rotation.x *= 0.8;
+        farmer.rightLeg.rotation.x *= 0.8;
+        farmer.leftArm.rotation.x *= 0.8;
+        farmer.rightArm.rotation.x *= 0.8;
+        farmer.group.position.y = 0;
+      }
+
+      if (farmer.actionAnim > 0) {
+        farmer.actionAnim = Math.max(0, farmer.actionAnim - dt * 4.2);
+        const punch = Math.sin(farmer.actionAnim * Math.PI);
+        farmer.rightArm.rotation.x = -punch * 1.45;
+        farmer.group.position.y = Math.max(farmer.group.position.y, punch * 0.16);
+      } else if (fishing.active) {
+        if (fishing.phase === 'caught') {
+          farmer.leftArm.rotation.x = -2.6;
+          farmer.rightArm.rotation.x = -2.6;
+        } else {
+          farmer.rightArm.rotation.x = -0.65;
+        }
+      }
+
+      const nearTile = getNearestTile(0.95);
+      if (nearTile) {
+        activeTileBox.position.set(nearTile.wx, 0.09, nearTile.wz);
+        activeTileBox.visible = true;
+      } else {
+        activeTileBox.visible = false;
+      }
+
+      const desiredX = THREE.MathUtils.clamp(farmer.x * 0.55 + 0.7, -3.0, 4.2);
+      const desiredZ = THREE.MathUtils.clamp(farmer.z * 0.55 + 0.2, -3.5, 3.2);
+      camLookTarget.x += (desiredX - camLookTarget.x) * Math.min(1, dt * 3.2);
+      camLookTarget.z += (desiredZ - camLookTarget.z) * Math.min(1, dt * 3.2);
+      camera.position.copy(camLookTarget).add(camOffset);
+      camera.lookAt(camLookTarget);
+    }
+
+    selectTool('harvest');
+    updateHUD();
+    updateDayNightCycle(0);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.05);
+      const elapsed = clock.elapsedTime;
+
+      const nightFactor = updateDayNightCycle(dt) || 0;
+
+      if (!state.isPaused) {
+        updateFarmer(dt);
+        updateCourier(dt);
+        updateFishing(dt, elapsed);
+      }
+
+      riverTex.offset.x -= dt * 0.12;
+      riverMeshes.forEach(item => {
+        item.mesh.position.y = item.baseY + Math.sin(elapsed * 2.2 + item.phase) * 0.015;
+      });
+
+      chimneySmoke.forEach(sm => {
+        sm.age = (sm.age + dt * 0.25) % 1;
+        sm.mesh.position.set(
+          HOUSE.x + 1.15 + Math.sin(sm.age * 5) * 0.18,
+          4.05 + sm.age * 1.9,
+          HOUSE.z - 0.45 - sm.age * 0.35
+        );
+        const sc = 0.7 + sm.age * 1.2;
+        sm.mesh.scale.set(sc, sc, sc);
+        sm.mesh.material.opacity = (1 - sm.age) * 0.42;
+      });
+
+      fireflies.forEach(f => {
+        f.sprite.position.x = f.bx + Math.sin(elapsed * 0.9 + f.phase) * 0.8;
+        f.sprite.position.y = f.by + Math.sin(elapsed * 1.6 + f.phase) * 0.25;
+        f.sprite.position.z = f.bz + Math.cos(elapsed * 0.8 + f.phase) * 0.8;
+        f.sprite.material.opacity = nightFactor * (0.45 + 0.55 * Math.abs(Math.sin(elapsed * 2.5 + f.phase)));
+      });
+
+      tiles.forEach(tile => {
+        if (tile.plantSprite) {
+          if (tile.popScale < 1) tile.popScale = Math.min(1, tile.popScale + dt * 3.5);
+          const sway = Math.sin(elapsed * 2.2 + tile.wx + tile.wz) * 0.03;
+          const sc = 1.25 * tile.popScale;
+          tile.plantSprite.scale.set(sc, sc, 1);
+          tile.plantSprite.position.x = tile.wx + sway;
+        }
+      });
+
+      treeMeshes.forEach(t => {
+        t.group.rotation.z = Math.sin(elapsed * 1.2 + t.phase) * 0.018;
+      });
+
+      const timeNow = getTimeInfo(state.timeMinutes);
+      const isNightTime = timeNow.h >= 19 || timeNow.h < 5;
+
+      animals.forEach(a => {
+        if (a.happyBounce > 0) a.happyBounce = Math.max(0, a.happyBounce - dt * 2.5);
+
+        if (isNightTime) {
+          const dx = a.sleepSpot.x - a.group.position.x;
+          const dz = a.sleepSpot.z - a.group.position.z;
+          const dist = Math.hypot(dx, dz);
+
+          if (dist > 0.12) {
+            a.isSleeping = false;
+            a.group.scale.y = 1;
+            const step = Math.min(dist, a.speed * dt);
+            a.group.position.x += (dx / dist) * step;
+            a.group.position.z += (dz / dist) * step;
+            a.group.rotation.y = Math.atan2(-dz, dx);
+            a.hopPhase += dt * 9;
+            a.group.position.y = Math.abs(Math.sin(a.hopPhase)) * 0.09;
+          } else {
+            a.isSleeping = true;
+            a.group.position.y = a.sleepOffsetY;
+            a.group.scale.y = 0.86 + Math.sin(elapsed * 2.4 + a.sleepSpot.x) * 0.035;
+            a.zzzTimer -= dt;
+            if (a.zzzTimer <= 0 && !state.isPaused) {
+              spawnZzz(a.group.position.x, 0.95, a.group.position.z);
+              a.zzzTimer = 2.4 + Math.random() * 1.6;
+            }
+          }
+          return;
+        }
+
+        if (a.isSleeping) {
+          a.isSleeping = false;
+          a.group.scale.y = 1;
+          a.group.position.y = 0;
+          a.waitTimer = 0.3;
+        }
+
+        const dx = a.targetX - a.group.position.x;
+        const dz = a.targetZ - a.group.position.z;
+        const dist = Math.hypot(dx, dz);
+
+        if (dist > 0.08) {
+          const step = Math.min(dist, a.speed * dt);
+          a.group.position.x += (dx / dist) * step;
+          a.group.position.z += (dz / dist) * step;
+          a.group.rotation.y = Math.atan2(-dz, dx);
+          a.hopPhase += dt * 10;
+          a.group.position.y = Math.abs(Math.sin(a.hopPhase)) * 0.11 + Math.sin(a.happyBounce * Math.PI) * 0.32;
+        } else {
+          a.group.position.y = Math.sin(a.happyBounce * Math.PI) * 0.35;
+          a.waitTimer -= dt;
+          if (a.waitTimer <= 0) {
+            a.targetX = a.bounds.minX + Math.random() * (a.bounds.maxX - a.bounds.minX);
+            a.targetZ = a.bounds.minZ + Math.random() * (a.bounds.maxZ - a.bounds.minZ);
+            a.waitTimer = 2.0 + Math.random() * 3.5;
+          }
+        }
+      });
+
+      for (let i = floatingHearts.length - 1; i >= 0; i--) {
+        const h = floatingHearts[i];
+        h.life -= dt * 0.9;
+        h.sprite.position.y += h.vy * dt;
+        h.sprite.material.opacity = Math.max(0, h.life);
+        if (h.life <= 0) {
+          scene.remove(h.sprite);
+          h.sprite.material.dispose();
+          floatingHearts.splice(i, 1);
+        }
+      }
+
+      for (let i = burstParticles.length - 1; i >= 0; i--) {
+        const b = burstParticles[i];
+        b.life -= dt;
+        b.vy -= 6.5 * dt;
+        b.mesh.position.x += b.vx * dt;
+        b.mesh.position.y = Math.max(0.05, b.mesh.position.y + b.vy * dt);
+        b.mesh.position.z += b.vz * dt;
+        b.mesh.material.opacity = Math.max(0, b.life / 0.65);
+        if (b.life <= 0) {
+          scene.remove(b.mesh);
+          b.mesh.material.dispose();
+          burstParticles.splice(i, 1);
+        }
+      }
+
+      petals.forEach(p => {
+        p.mesh.visible = state.weather !== 'rainy';
+        if (!p.mesh.visible) return;
+        p.mesh.position.x += p.vx * dt;
+        p.mesh.position.y += p.vy * dt;
+        p.mesh.position.z += p.vz * dt;
+        p.mesh.rotation.x += p.rotSpeed * dt;
+        p.mesh.rotation.y += p.rotSpeed * 0.7 * dt;
+        if (p.mesh.position.y < 0.2) {
+          p.mesh.position.set((Math.random() - 0.5) * 26 + 4, 7 + Math.random() * 3, (Math.random() - 0.5) * 24 - 4);
+        }
+      });
+
+      if (state.weather === 'rainy') {
+        rainGroup.visible = true;
+        rainDrops.forEach(r => {
+          r.mesh.position.y -= r.speed * dt;
+          r.mesh.position.x -= r.speed * 0.14 * dt;
+          if (r.mesh.position.y < 0.1) {
+            r.mesh.position.set(
+              camLookTarget.x + (Math.random() - 0.5) * 26 + 2,
+              10 + Math.random() * 5,
+              camLookTarget.z + (Math.random() - 0.5) * 24
+            );
+          }
+        });
+      } else {
+        rainGroup.visible = false;
+      }
+
+      if (targetRing.visible) {
+        const pulse = 1 + Math.sin(elapsed * 8) * 0.12;
+        targetRing.scale.set(pulse, pulse, 1);
+      }
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      frustumSize = window.innerWidth < 640 ? 19.5 : 15.2;
+      const aspect = window.innerWidth / window.innerHeight;
+      camera.left = (-frustumSize * aspect) / 2;
+      camera.right = (frustumSize * aspect) / 2;
+      camera.top = frustumSize / 2;
+      camera.bottom = -frustumSize / 2;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
