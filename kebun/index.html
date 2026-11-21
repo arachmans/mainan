@@ -918,6 +918,9 @@
       </div>
     </div>
     <div class="hud-group">
+      <button class="pill btn-next-day" id="btn-toggle-audio" title="Nyalakan / matikan musik & efek suara">
+        🔊 Suara
+      </button>
       <button class="pill btn-next-day" id="btn-open-guide" title="Buku petunjuk lama panen & tips bertani">
         📖 Petunjuk
       </button>
@@ -1571,6 +1574,7 @@
       state.tool = toolName;
       toolButtons.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.tool === toolName);
+        SoundFX.play('ui');
       });
     }
 
@@ -1581,6 +1585,197 @@
     // =========================================================
     // 2. SETUP SCENE, KAMERA ISOMETRIK & RENDERER
     // =========================================================
+    // =========================================================
+    // 1B. MESIN AUDIO & MUSIK LATAR (WEB AUDIO API — ZERO ASSET)
+    // =========================================================
+    const SoundFX = (() => {
+      let ctx = null;
+      let enabled = true;
+      let bgmTimer = null;
+      let bgmStep = 0;
+      let noiseBuffer = null;
+
+      // Melodi pentatonik hangat bergaya game bertani (frekuensi Hz)
+      const melody = [
+        523.25, 659.25, 783.99, 659.25, 587.33, 659.25, 523.25, 0,
+        440.00, 523.25, 659.25, 523.25, 587.33, 0, 392.00, 0,
+        523.25, 659.25, 783.99, 880.00, 783.99, 659.25, 587.33, 0,
+        440.00, 587.33, 659.25, 523.25, 523.25, 0, 0, 0
+      ];
+      const bass = [
+        261.63, 0, 0, 0, 196.00, 0, 0, 0,
+        220.00, 0, 0, 0, 196.00, 0, 0, 0,
+        174.61, 0, 0, 0, 261.63, 0, 0, 0,
+        196.00, 0, 0, 0, 261.63, 0, 0, 0
+      ];
+
+      function ensureContext() {
+        if (!ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) return null;
+          ctx = new AudioCtx();
+          // Buat buffer noise sekali pakai untuk suara langkah, air, dan cangkul
+          noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
+          const data = noiseBuffer.getChannelData(0);
+          for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+        }
+        if (ctx.state === 'suspended') ctx.resume();
+        return ctx;
+      }
+
+      function tone(freq, dur, type = 'sine', vol = 0.08, delay = 0, slideTo = null) {
+        if (!enabled) return;
+        const c = ensureContext();
+        if (!c) return;
+        const t = c.currentTime + delay;
+        const osc = c.createOscillator();
+        const gain = c.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t);
+        if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.linearRampToValueAtTime(vol, t + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+        osc.connect(gain);
+        gain.connect(c.destination);
+        osc.start(t);
+        osc.stop(t + dur + 0.02);
+      }
+
+      function noise(dur, filterFreq, filterType = 'bandpass', vol = 0.08, delay = 0) {
+        if (!enabled) return;
+        const c = ensureContext();
+        if (!c || !noiseBuffer) return;
+        const t = c.currentTime + delay;
+        const src = c.createBufferSource();
+        src.buffer = noiseBuffer;
+
+        const filter = c.createBiquadFilter();
+        filter.type = filterType;
+        filter.frequency.setValueAtTime(filterFreq, t);
+
+        const gain = c.createGain();
+        gain.gain.setValueAtTime(vol, t);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(c.destination);
+        src.start(t);
+        src.stop(t + dur + 0.02);
+      }
+
+      function startBGM() {
+        if (bgmTimer || !enabled) return;
+        bgmTimer = setInterval(() => {
+          if (!enabled || !ctx || ctx.state !== 'running') return;
+          const m = melody[bgmStep % melody.length];
+          const b = bass[bgmStep % bass.length];
+          if (m > 0) tone(m, 0.36, 'triangle', 0.032);
+          if (b > 0) tone(b, 0.72, 'sine', 0.028);
+          bgmStep++;
+        }, 380);
+      }
+
+      function unlock() {
+        ensureContext();
+        startBGM();
+      }
+
+      function toggle() {
+        enabled = !enabled;
+        const btn = document.getElementById('btn-toggle-audio');
+        if (btn) btn.textContent = enabled ? '🔊 Suara' : '🔇 Bisu';
+        if (enabled) {
+          ensureContext();
+          startBGM();
+          play('ui');
+        }
+      }
+
+      function step(onWood = false) {
+        if (!enabled) return;
+        if (onWood) {
+          // Ketukan kayu ringan saat berjalan di deking
+          tone(185 + Math.random() * 25, 0.06, 'triangle', 0.06, 0, 95);
+          noise(0.04, 900, 'bandpass', 0.035);
+        } else {
+          // Langkah lembut di rumput / tanah
+          noise(0.055, 420 + Math.random() * 140, 'lowpass', 0.045);
+          tone(110 + Math.random() * 15, 0.045, 'sine', 0.03, 0, 65);
+        }
+      }
+
+      function play(name) {
+        if (!enabled) return;
+        switch (name) {
+          case 'ui':
+            tone(620, 0.06, 'triangle', 0.05, 0, 760);
+            break;
+          case 'hoe':
+            noise(0.11, 520, 'lowpass', 0.12);
+            tone(145, 0.11, 'triangle', 0.09, 0, 62);
+            break;
+          case 'plant':
+            tone(340, 0.08, 'sine', 0.07, 0, 560);
+            noise(0.06, 1200, 'bandpass', 0.035, 0.03);
+            break;
+          case 'water':
+            noise(0.26, 1400, 'bandpass', 0.07);
+            tone(520, 0.08, 'sine', 0.04, 0.03, 780);
+            tone(640, 0.08, 'sine', 0.04, 0.11, 920);
+            break;
+          case 'harvest':
+            tone(523.25, 0.1, 'triangle', 0.08, 0);
+            tone(783.99, 0.18, 'triangle', 0.09, 0.08);
+            break;
+          case 'coin':
+            tone(987.77, 0.09, 'sine', 0.08, 0);
+            tone(1318.51, 0.22, 'sine', 0.09, 0.07);
+            break;
+          case 'pet':
+            tone(480, 0.09, 'sine', 0.06, 0, 720);
+            tone(660, 0.12, 'sine', 0.06, 0.08, 880);
+            break;
+          case 'cast':
+            noise(0.14, 1100, 'highpass', 0.05);
+            noise(0.2, 650, 'bandpass', 0.09, 0.18);
+            tone(380, 0.12, 'sine', 0.05, 0.18, 170);
+            break;
+          case 'nibble':
+            tone(460, 0.07, 'sine', 0.06, 0, 290);
+            break;
+          case 'bite':
+            tone(783.99, 0.09, 'square', 0.05, 0);
+            tone(1046.5, 0.16, 'square', 0.06, 0.09);
+            break;
+          case 'catch':
+            tone(523.25, 0.1, 'triangle', 0.09, 0);
+            tone(659.25, 0.1, 'triangle', 0.09, 0.09);
+            tone(783.99, 0.1, 'triangle', 0.09, 0.18);
+            tone(1046.5, 0.28, 'triangle', 0.1, 0.27);
+            break;
+          case 'fail':
+            tone(320, 0.14, 'sawtooth', 0.04, 0, 220);
+            tone(220, 0.2, 'sawtooth', 0.04, 0.12, 150);
+            break;
+          case 'sleep':
+            tone(392.00, 0.22, 'sine', 0.06, 0);
+            tone(329.63, 0.25, 'sine', 0.06, 0.18);
+            tone(261.63, 0.45, 'sine', 0.06, 0.36);
+            break;
+        }
+      }
+
+      return { unlock, toggle, play, step };
+    })();
+
+    // Otomatis aktifkan musik saat interaksi pertama pemain (aturan autoplay browser)
+    window.addEventListener('pointerdown', () => SoundFX.unlock(), { once: true });
+    window.addEventListener('keydown', () => SoundFX.unlock(), { once: true });
+    document.getElementById('btn-toggle-audio').addEventListener('click', () => SoundFX.toggle());
     const container = document.getElementById('game-container');
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x96bf5c);
@@ -2551,6 +2746,12 @@
     // =========================================================
     const riverMeshes = [];
     const clickableRiver = [];
+    const clickableDock = [];
+    const DOCK_BOUNDS = { minX: 2.3, maxX: 3.4, minZ: 4.95, maxZ: 6.12, topY: 0.16 };
+
+    function isOnDock(x, z) {
+      return x >= DOCK_BOUNDS.minX - 0.15 && x <= DOCK_BOUNDS.maxX + 0.15 && z > 4.95 && z <= DOCK_BOUNDS.maxZ + 0.15;
+    }
 
     function buildRiver() {
       const riverGroup = new THREE.Group();
@@ -2594,6 +2795,15 @@
         p.castShadow = true;
         dockGroup.add(p);
       });
+      const dockHit = new THREE.Mesh(
+        new THREE.BoxGeometry(1.55, 0.35, 1.45),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      dockHit.position.set(0, 0.18, 0.55);
+      dockHit.userData = { type: 'dock' };
+      dockGroup.add(dockHit);
+      clickableDock.push(dockHit);
+
       riverGroup.add(dockGroup);
 
       const rockMat = new THREE.MeshStandardMaterial({ color: 0x9b9588, roughness: 0.92 });
@@ -2863,11 +3073,19 @@
       leftArm: null,
       rightArm: null,
       rodMesh: null,
+      hoeMesh: null,
+      hoeBladeMat: null,
+      wateringCanMesh: null,
+      wateringCanMat: null,
+      waterAnim: 0,
+      waterDropCooldown: 0,
+      harvestLift: null,
       x: 0.55,
       z: 0.25,
       radius: 0.3,
       speed: 4.3,
       walkPhase: 0,
+      lastStepIndex: 0,
       actionAnim: 0,
       waypoints: [],
       pendingAction: null
@@ -2932,6 +3150,64 @@
       farmer.rightArm.add(rodGroup);
       farmer.rodMesh = rodGroup;
 
+      // Cangkul 3D di tangan kanan saat alat Cangkul dipilih
+      const hoeGroup = new THREE.Group();
+      const hoeHandle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.022, 0.025, 1.05, 7),
+        new THREE.MeshStandardMaterial({ color: 0x8f5b2d, roughness: 0.85 })
+      );
+      hoeHandle.position.set(0, -0.04, 0.36);
+      hoeHandle.rotation.x = Math.PI * 0.42;
+      hoeHandle.castShadow = true;
+
+      const hoeBladeMat = new THREE.MeshStandardMaterial({
+        color: 0x5c636a,
+        roughness: 0.45,
+        metalness: 0.55
+      });
+      const hoeCollar = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.075, 0.08), hoeBladeMat);
+      hoeCollar.position.set(0, -0.14, 0.78);
+
+      const hoeBlade = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.035), hoeBladeMat);
+      hoeBlade.position.set(0, -0.23, 0.82);
+      hoeBlade.rotation.x = 0.25;
+      hoeBlade.castShadow = true;
+
+      hoeGroup.add(hoeHandle, hoeCollar, hoeBlade);
+      hoeGroup.position.set(0.02, -0.14, 0.04);
+      hoeGroup.visible = false;
+      farmer.rightArm.add(hoeGroup);
+      farmer.hoeMesh = hoeGroup;
+      farmer.hoeBladeMat = hoeBladeMat;
+
+      // Gembor Penyiram 3D di tangan kanan saat alat Siram dipilih
+      const canGroup = new THREE.Group();
+      const canMat = new THREE.MeshStandardMaterial({ color: 0x4ea8de, roughness: 0.45, metalness: 0.15 });
+      const canBody = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.22, 10), canMat);
+      canBody.castShadow = true;
+
+      const canSpout = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.04, 0.24, 6), canMat);
+      canSpout.position.set(0, 0.03, 0.16);
+      canSpout.rotation.x = Math.PI * 0.32;
+
+      const canNozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.025, 0.05, 8), canMat);
+      canNozzle.position.set(0, 0.1, 0.27);
+      canNozzle.rotation.x = Math.PI * 0.32;
+
+      const canHandle = new THREE.Mesh(
+        new THREE.TorusGeometry(0.085, 0.018, 6, 12, Math.PI),
+        canMat
+      );
+      canHandle.position.set(0, 0.1, -0.02);
+      canHandle.rotation.y = Math.PI / 2;
+
+      canGroup.add(canBody, canSpout, canNozzle, canHandle);
+      canGroup.position.set(0.02, -0.22, 0.16);
+      canGroup.visible = false;
+      farmer.rightArm.add(canGroup);
+      farmer.wateringCanMesh = canGroup;
+      farmer.wateringCanMat = canMat;
+
       const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 12), skinMat);
       head.position.y = 1.06;
       head.castShadow = true;
@@ -2965,6 +3241,33 @@
       scene.add(g);
     }
     buildFarmer();
+
+    // Sprite 3D hasil panen yang diangkat petani sebelum masuk Gudang
+    const harvestLiftSprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({ transparent: true, opacity: 1 })
+    );
+    harvestLiftSprite.visible = false;
+    scene.add(harvestLiftSprite);
+
+    function finishHarvestLift() {
+      if (!farmer.harvestLift) return;
+      const lift = farmer.harvestLift;
+      farmer.harvestLift = null;
+      harvestLiftSprite.visible = false;
+
+      // Masukkan hasil panen ke Gudang (Storage) setelah diangkat
+      lift.items.forEach(it => {
+        state.storage[it.storageKey] += 1;
+      });
+      if (state.tutorial.active && state.tutorial.step === 0) {
+        state.tutorial.harvestedInit += lift.tutCount;
+      }
+
+      spawnBurst(farmer.x, 1.85, farmer.z, lift.burstColor, 10);
+      showToast(`📦 ${lift.summaryText} masuk ke Gudang! Jual di 📱 Toko Online.`);
+      updateHUD();
+      advanceTutorialIfReady();
+    }
 
     function isInsideGarden(x, z) {
       return x > GARDEN.minX && x < GARDEN.maxX && z > GARDEN.minZ && z < GARDEN.maxZ;
@@ -3041,7 +3344,12 @@
         }
       }
       farmer.x = THREE.MathUtils.clamp(farmer.x, WORLD_LIMIT.minX, WORLD_LIMIT.maxX);
-      farmer.z = THREE.MathUtils.clamp(farmer.z, WORLD_LIMIT.minZ, WORLD_LIMIT.maxZ);
+      if (farmer.z > WORLD_LIMIT.maxZ && farmer.x >= DOCK_BOUNDS.minX - 0.25 && farmer.x <= DOCK_BOUNDS.maxX + 0.25) {
+        farmer.x = THREE.MathUtils.clamp(farmer.x, DOCK_BOUNDS.minX, DOCK_BOUNDS.maxX);
+        farmer.z = THREE.MathUtils.clamp(farmer.z, WORLD_LIMIT.minZ, DOCK_BOUNDS.maxZ);
+      } else {
+        farmer.z = THREE.MathUtils.clamp(farmer.z, WORLD_LIMIT.minZ, WORLD_LIMIT.maxZ);
+      }
     }
 
     // =========================================================
@@ -3473,6 +3781,7 @@
 
       farmer.group.rotation.y = Math.atan2(waterX - farmer.x, waterZ - farmer.z);
       farmer.actionAnim = 0.9;
+      SoundFX.play('cast');
 
       fishingBannerEl.textContent = '🎣 Melempar kail ke sungai...';
       fishingBannerEl.classList.remove('bite');
@@ -3508,7 +3817,7 @@
         fishing.zoneVel = 0;
         fishing.fishPos = 0.5;
         fishing.fishTarget = 0.5;
-        fishing.progress = 0.32;
+        fishing.progress = 0.42;
         fishingBannerEl.classList.remove('active', 'bite');
         reelFishEl.textContent = fishing.targetFish.icon;
         reelGameEl.classList.add('active');
@@ -3546,6 +3855,7 @@
       const sc = caught.sizeLabel === 'Jumbo' ? 1.35 : caught.sizeLabel === 'Besar' ? 1.15 : 0.92;
       liftedFishGroup.scale.set(sc, sc, sc);
       liftedFishGroup.visible = true;
+      SoundFX.play('catch');
 
       spawnBurst(fishing.bobberPos.x, 0.25, fishing.bobberPos.z, 0x9be0f0, 14);
       spawnHeart(farmer.x, 1.85, farmer.z, isNew ? 3 : 1);
@@ -3600,13 +3910,16 @@
 
             if (fishing.nibblesLeft <= 0) {
               fishing.phase = 'bite';
-              fishing.timer = state.upgrades.rod ? 2.8 : 2.1;
+              SoundFX.play('bite');
+              // Waktu reaksi lebih longgar (3 detik standar, 3.8 detik Pancing Pro)
+              fishing.timer = state.upgrades.rod ? 3.8 : 3.0;
               fishingBannerEl.textContent = '❗ IKAN MENYAMBAR! Klik layar atau tekan Spasi!';
               fishingBannerEl.classList.add('bite');
               spawnBurst(fishing.bobberPos.x, 0.15, fishing.bobberPos.z, 0xffffff, 12);
             } else {
               fishShadowGroup.position.x += 0.35;
               fishing.nibbleCooldown = 0.85 + Math.random() * 0.9;
+              SoundFX.play('nibble');
             }
           }
         }
@@ -3617,27 +3930,32 @@
         if (fishing.timer <= 0) {
           stopFishing();
           showToast('Yah, ikannya keburu lepas! Coba lempar lagi 🎣');
+          SoundFX.play('fail');
           return;
         }
       } else if (fishing.phase === 'reeling') {
-        const zoneWidth = state.upgrades.rod ? 0.34 : 0.24;
+        // Zona hijau lebih lebar (34% Pancing Kayu, 44% Pancing Pro)
+        const zoneWidth = state.upgrades.rod ? 0.44 : 0.34;
         const diff = fishing.targetFish ? fishing.targetFish.difficulty : 1.0;
 
-        const accel = fishing.holding ? 1.85 : -1.55;
-        fishing.zoneVel = THREE.MathUtils.clamp(fishing.zoneVel + accel * dt, -1.1, 1.1);
+        // Gerakan zona hijau halus & tidak licin
+        const targetVel = fishing.holding ? 0.65 : -0.55;
+        fishing.zoneVel += (targetVel - fishing.zoneVel) * Math.min(1, dt * 9.0);
         fishing.zonePos += fishing.zoneVel * dt;
         if (fishing.zonePos < 0) { fishing.zonePos = 0; fishing.zoneVel = 0; }
         if (fishing.zonePos > 1 - zoneWidth) { fishing.zonePos = 1 - zoneWidth; fishing.zoneVel = 0; }
 
+        // Gerakan ikan lebih tenang & mudah diikuti
         fishing.fishMoveTimer -= dt;
         if (fishing.fishMoveTimer <= 0) {
-          fishing.fishTarget = 0.08 + Math.random() * 0.84;
-          fishing.fishMoveTimer = (0.55 + Math.random() * 0.7) / diff;
+          fishing.fishTarget = 0.12 + Math.random() * 0.76;
+          fishing.fishMoveTimer = (1.05 + Math.random() * 0.85) / Math.sqrt(diff);
         }
-        fishing.fishPos += (fishing.fishTarget - fishing.fishPos) * Math.min(1, dt * 3.2 * diff);
+        fishing.fishPos += (fishing.fishTarget - fishing.fishPos) * Math.min(1, dt * 1.85 * Math.sqrt(diff));
 
+        // Bar cepat penuh saat tepat sasaran, turun pelan saat meleset
         const inside = fishing.fishPos >= fishing.zonePos && fishing.fishPos <= (fishing.zonePos + zoneWidth);
-        fishing.progress += (inside ? 0.34 : -0.22) * dt;
+        fishing.progress += (inside ? 0.42 : -0.11) * dt;
         fishing.progress = THREE.MathUtils.clamp(fishing.progress, 0, 1);
 
         reelZoneEl.style.left = `${fishing.zonePos * 100}%`;
@@ -3645,7 +3963,7 @@
         reelFishEl.style.left = `${fishing.fishPos * 100}%`;
         reelProgFillEl.style.width = `${fishing.progress * 100}%`;
 
-        bobberGroup.position.x = fishing.bobberPos.x + (fishing.fishPos - 0.5) * 0.65;
+        bobberGroup.position.x = fishing.bobberPos.x + (fishing.fishPos - 0.5) * 0.55;
         bobberGroup.position.y = -0.02 + Math.sin(elapsed * 22) * 0.05;
 
         if (fishing.progress >= 1) {
@@ -3654,6 +3972,7 @@
         } else if (fishing.progress <= 0) {
           stopFishing();
           showToast('Tali kendor! Ikannya berhasil kabur 🐟💨');
+          SoundFX.play('fail');
           return;
         }
       } else if (fishing.phase === 'caught') {
@@ -3857,6 +4176,7 @@
             spawnHeart(COURIER_DROP.x, 1.35, COURIER_DROP.z, 2);
             spawnBurst(COURIER_DROP.x - 0.3, 0.7, COURIER_DROP.z - 0.5, 0x8bc663, 12);
             showToast(`💰 Kurir mengambil ${ord.label}! +${ord.payout} Koin 🪙`);
+            SoundFX.play('coin');
           }
           updateHUD();
           advanceTutorialIfReady();
@@ -4297,6 +4617,7 @@
 
       closeAllModals();
       showToast(`📱 Pembelian dikonfirmasi (${summary.totalCost} 🪙)! Kurir segera mengantar 🚚`);
+      SoundFX.play('coin');
     }
 
     function confirmSellCart() {
@@ -4598,6 +4919,7 @@
       const gained = state.energy - before;
       updateHUD();
       updateDayNightCycle(0);
+      SoundFX.play('sleep');
 
       if (state.hoursAwake >= 24) {
         houseModalEl.classList.remove('open');
@@ -4615,6 +4937,7 @@
       houseModalEl.classList.remove('open');
       state.isPaused = true;
       dayFadeEl.classList.add('active');
+      SoundFX.play('sleep');
 
       setTimeout(() => {
         state.day += 1;
@@ -4829,6 +5152,7 @@
         if (area.length > 0) {
           if (!consumeEnergy(1)) return;
           farmer.actionAnim = 1.0;
+          SoundFX.play('hoe');
           area.forEach(t => {
             t.state = 'tilled';
             t.watered = state.weather === 'rainy';
@@ -4856,6 +5180,7 @@
         }
         if (!consumeEnergy(1)) return;
         farmer.actionAnim = 1.0;
+        SoundFX.play('plant');
         let plantedCount = 0;
         for (const t of area) {
           if (state.storage[seedKey] <= 0) break;
@@ -4891,7 +5216,9 @@
           return;
         }
         if (!consumeEnergy(1)) return;
-        farmer.actionAnim = 1.0;
+        farmer.waterAnim = 1.0;
+        SoundFX.play('water');
+        farmer.waterDropCooldown = 0;
         area.forEach(t => {
           t.watered = true;
           refreshTileVisual(t);
@@ -4904,11 +5231,17 @@
         const area = getTargetTiles(tile, state.upgrades.harvest).filter(t => t.state === 'planted' && t.stage === 2);
         if (area.length > 0) {
           if (!consumeEnergy(1)) return;
-          farmer.actionAnim = 1.0;
+          if (farmer.harvestLift) finishHarvestLift();
+
+          const harvestedItems = [];
+          const firstCropKey = area[0].cropType;
+          const firstCrop = CROPS[firstCropKey];
+          let tutCount = 0;
+
           area.forEach(t => {
             const crop = CROPS[t.cropType];
-            state.storage[crop.storageKey] += 1;
-            if (state.tutorial.active && state.tutorial.step === 0) state.tutorial.harvestedInit += 1;
+            harvestedItems.push({ storageKey: crop.storageKey, name: crop.name, icon: crop.icon });
+            if (state.tutorial.active && state.tutorial.step === 0) tutCount += 1;
             spawnHeart(t.wx, 1.0, t.wz, 1);
             spawnBurst(t.wx, 0.45, t.wz, crop.burstColor, 8);
             t.state = 'tilled';
@@ -4918,9 +5251,26 @@
             t.watered = state.weather === 'rainy';
             refreshTileVisual(t);
           });
-          showToast(`📦 Panen ${area.length} hasil tani masuk Gudang! Jual di 📱 Toko Online.`);
-          updateHUD();
-          advanceTutorialIfReady();
+
+          harvestLiftSprite.material.map = plantTextures[firstCropKey][2];
+          harvestLiftSprite.material.needsUpdate = true;
+          harvestLiftSprite.scale.set(1.05, 1.05, 1);
+          harvestLiftSprite.visible = true;
+
+          farmer.harvestLift = {
+            timer: 1.15,
+            duration: 1.15,
+            startX: area[0].wx,
+            startZ: area[0].wz,
+            items: harvestedItems,
+            tutCount,
+            burstColor: firstCrop.burstColor,
+            summaryText: area.length > 1
+              ? `${area.length} hasil panen`
+              : `${firstCrop.icon} ${firstCrop.name}`
+          };
+          showToast(`✨ Memanen ${farmer.harvestLift.summaryText}!`);
+          SoundFX.play('harvest');
         } else if (tile.state === 'planted' && tile.cropType) {
           const crop = CROPS[tile.cropType];
           const remaining = Math.max(1, crop.daysToGrow - tile.wateredDays);
@@ -4939,6 +5289,7 @@
         return;
       }
       animalObj.happyBounce = 1.0;
+      SoundFX.play('pet');
       spawnHeart(animalObj.group.position.x, 1.15, animalObj.group.position.z, 3);
       showToast(`${animalObj.name} senang kamu elus! 💕`);
     }
@@ -4989,7 +5340,7 @@
         if (distHouse < 1.65) {
           openHouseModal();
         } else if (farmer.z >= 4.25 && state.tool === 'rod' && state.hasRod) {
-          startFishing(farmer.x, 6.25);
+          startFishing(farmer.x, isOnDock(farmer.x, farmer.z) ? 7.15 : 6.25);
         } else if (nearTile) {
           handleTileAction(nearTile);
         } else if (nearAnimal) {
@@ -5035,7 +5386,7 @@
         document.body.style.cursor = 'pointer';
       } else {
         hoverBox.visible = false;
-        const otherHits = raycaster.intersectObjects([...clickableAnimals, ...clickableHouse, ...clickableRiver]);
+        const otherHits = raycaster.intersectObjects([...clickableAnimals, ...clickableHouse, ...clickableDock, ...clickableRiver]);
         document.body.style.cursor = otherHits.length > 0 ? 'pointer' : 'default';
       }
     });
@@ -5081,7 +5432,36 @@
         return;
       }
 
+      
+
+      const dockHits = raycaster.intersectObjects(clickableDock);
+      if (dockHits.length > 0) {
+        const pt = dockHits[0].point;
+        const dx = THREE.MathUtils.clamp(pt.x, DOCK_BOUNDS.minX, DOCK_BOUNDS.maxX);
+        const dz = THREE.MathUtils.clamp(pt.z, 5.05, DOCK_BOUNDS.maxZ);
+        setFarmerRoute(dx, dz, null);
+        targetRing.position.set(dx, DOCK_BOUNDS.topY + 0.03, dz);
+        targetRing.visible = true;
+        return;
+      }
+
       const riverHits = raycaster.intersectObjects(clickableRiver);
+      if (riverHits.length > 0) {
+        if (!state.hasRod) {
+          showToast('Kamu belum punya alat pancing! Beli 🎣 Pancing Kayu di 📱 Toko Online → Alat Canggih.');
+          return;
+        }
+        selectTool('rod');
+        const pt = riverHits[0].point;
+        const nearDock = pt.x >= 1.8 && pt.x <= 3.9;
+        const bankX = nearDock ? 2.85 : THREE.MathUtils.clamp(pt.x, -7.8, 8.8);
+        const bankZ = nearDock ? 6.02 : 4.82;
+        const waterZ = nearDock ? THREE.MathUtils.clamp(pt.z, 6.85, 7.75) : THREE.MathUtils.clamp(pt.z, 5.85, 7.55);
+        setFarmerRoute(bankX, bankZ, { type: 'fish', waterX: bankX, waterZ });
+        targetRing.position.set(bankX, nearDock ? DOCK_BOUNDS.topY + 0.03 : 0.08, bankZ);
+        targetRing.visible = true;
+        return;
+      }
       if (riverHits.length > 0) {
         if (!state.hasRod) {
           showToast('Kamu belum punya alat pancing! Beli 🎣 Pancing Kayu di 📱 Toko Online → Alat Canggih.');
@@ -5190,41 +5570,115 @@
         }
       }
 
+      // Tampilkan alat 3D di tangan kanan sesuai alat aktif
       if (farmer.rodMesh) {
         farmer.rodMesh.visible = state.hasRod && state.tool === 'rod';
+      }
+      if (farmer.hoeMesh) {
+        farmer.hoeMesh.visible = state.tool === 'hoe';
+        if (farmer.hoeBladeMat) {
+          farmer.hoeBladeMat.color.setHex(state.upgrades.hoe ? 0xd0e2f2 : 0x5c636a);
+          farmer.hoeBladeMat.metalness = state.upgrades.hoe ? 0.85 : 0.55;
+        }
+      }
+      if (farmer.wateringCanMesh) {
+        farmer.wateringCanMesh.visible = state.tool === 'water';
+        if (farmer.wateringCanMat) {
+          farmer.wateringCanMat.color.setHex(state.upgrades.water ? 0xf0b84b : 0x4ea8de);
+        }
       }
 
       resolveFarmerCollisions();
       farmer.group.position.x = farmer.x;
       farmer.group.position.z = farmer.z;
 
+      const onDockNow = typeof isOnDock === 'function' && isOnDock(farmer.x, farmer.z);
+      const baseY = onDockNow ? DOCK_BOUNDS.topY : 0;
+
+      // Satu blok animasi jalan & suara langkah kaki
       if (isMoving) {
         farmer.walkPhase += dt * 13;
+        const stepIdx = Math.floor(farmer.walkPhase / Math.PI);
+        if (stepIdx !== farmer.lastStepIndex) {
+          farmer.lastStepIndex = stepIdx;
+          if (typeof SoundFX !== 'undefined') SoundFX.step(onDockNow);
+        }
         const swing = Math.sin(farmer.walkPhase) * 0.55;
         farmer.leftLeg.rotation.x = swing;
         farmer.rightLeg.rotation.x = -swing;
         farmer.leftArm.rotation.x = -swing * 0.7;
         farmer.rightArm.rotation.x = swing * 0.7;
-        farmer.group.position.y = Math.abs(Math.sin(farmer.walkPhase)) * 0.1;
+        farmer.group.position.y = baseY + Math.abs(Math.sin(farmer.walkPhase)) * 0.1;
       } else {
         farmer.leftLeg.rotation.x *= 0.8;
         farmer.rightLeg.rotation.x *= 0.8;
         farmer.leftArm.rotation.x *= 0.8;
         farmer.rightArm.rotation.x *= 0.8;
-        farmer.group.position.y = 0;
+        farmer.group.position.y = baseY;
       }
 
-      if (farmer.actionAnim > 0) {
-        farmer.actionAnim = Math.max(0, farmer.actionAnim - dt * 4.2);
-        const punch = Math.sin(farmer.actionAnim * Math.PI);
-        farmer.rightArm.rotation.x = -punch * 1.45;
-        farmer.group.position.y = Math.max(farmer.group.position.y, punch * 0.16);
-      } else if (fishing.active) {
-        if (fishing.phase === 'caught') {
-          farmer.leftArm.rotation.x = -2.6;
-          farmer.rightArm.rotation.x = -2.6;
-        } else {
-          farmer.rightArm.rotation.x = -0.65;
+      // Animasi gembor menyiram, ayunan cangkul, atau memancing
+      if (farmer.waterAnim > 0) {
+        farmer.waterAnim = Math.max(0, farmer.waterAnim - dt * 1.65);
+        const tilt = Math.sin(farmer.waterAnim * Math.PI);
+        farmer.rightArm.rotation.x = -0.75 - tilt * 0.55;
+        if (farmer.wateringCanMesh) {
+          farmer.wateringCanMesh.rotation.x = tilt * 0.75;
+        }
+        farmer.waterDropCooldown -= dt;
+        if (farmer.waterDropCooldown <= 0 && tilt > 0.25) {
+          const spoutX = farmer.x + Math.sin(farmer.group.rotation.y) * 0.62;
+          const spoutZ = farmer.z + Math.cos(farmer.group.rotation.y) * 0.62;
+          spawnBurst(spoutX, 0.55, spoutZ, 0x6ec6ff, 3);
+          farmer.waterDropCooldown = 0.08;
+        }
+      } else {
+        if (farmer.wateringCanMesh) farmer.wateringCanMesh.rotation.x = 0;
+        if (farmer.actionAnim > 0) {
+          farmer.actionAnim = Math.max(0, farmer.actionAnim - dt * 3.4);
+          if (state.tool === 'hoe') {
+            const p = 1 - farmer.actionAnim;
+            const chopAngle = p < 0.35
+              ? THREE.MathUtils.lerp(0, -2.15, p / 0.35)
+              : (p < 0.72
+                ? THREE.MathUtils.lerp(-2.15, -0.2, (p - 0.35) / 0.37)
+                : THREE.MathUtils.lerp(-0.2, 0, (p - 0.72) / 0.28));
+            farmer.rightArm.rotation.x = chopAngle;
+            farmer.group.position.y = baseY + Math.sin(p * Math.PI) * 0.1;
+          } else {
+            const punch = Math.sin(farmer.actionAnim * Math.PI);
+            farmer.rightArm.rotation.x = -punch * 1.45;
+            farmer.group.position.y = Math.max(farmer.group.position.y, baseY + punch * 0.16);
+          }
+        } else if (fishing.active) {
+          if (fishing.phase === 'caught') {
+            farmer.leftArm.rotation.x = -2.6;
+            farmer.rightArm.rotation.x = -2.6;
+          } else {
+            farmer.rightArm.rotation.x = -0.65;
+          }
+        }
+      }
+
+      // Animasi mengangkat hasil panen di atas kepala sebelum masuk Gudang
+      if (farmer.harvestLift) {
+        const lift = farmer.harvestLift;
+        lift.timer -= dt;
+        const p = Math.min(1, (lift.duration - lift.timer) / 0.35);
+        harvestLiftSprite.position.set(
+          THREE.MathUtils.lerp(lift.startX, farmer.x, p),
+          THREE.MathUtils.lerp(0.6, 2.02, p) + Math.sin(p * Math.PI) * 0.35,
+          THREE.MathUtils.lerp(lift.startZ, farmer.z, p)
+        );
+        farmer.leftArm.rotation.x = -2.55;
+        farmer.rightArm.rotation.x = -2.55;
+
+        if (lift.timer < 0.2) {
+          const sc = Math.max(0.05, (lift.timer / 0.2) * 1.05);
+          harvestLiftSprite.scale.set(sc, sc, 1);
+        }
+        if (lift.timer <= 0) {
+          finishHarvestLift();
         }
       }
 
