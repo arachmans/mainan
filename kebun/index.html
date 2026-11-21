@@ -4304,13 +4304,14 @@
     // =========================================================
     // 12. MODAL, TOKO ONLINE KERANJANG, RUMAH & AKSI BERTANI
     // =========================================================
+    function isTimePaused() {
+      return state.isPaused ||
+        dayFadeEl.classList.contains('active') ||
+        Boolean(document.querySelector('.modal-backdrop.open'));
+    }
+
     function closeAllModals() {
-      houseModalEl.classList.remove('open');
-      storageModalEl.classList.remove('open');
-      shopModalEl.classList.remove('open');
-      guideModalEl.classList.remove('open');
-      reportModalEl.classList.remove('open');
-      fishingGuideModalEl.classList.remove('open');
+      document.querySelectorAll('.modal-backdrop.open').forEach(el => el.classList.remove('open'));
       state.isPaused = false;
     }
 
@@ -5061,7 +5062,8 @@
     }
 
     function updateDayNightCycle(dt) {
-      if (!state.isPaused && dt > 0) {
+      const paused = isTimePaused();
+      if (!paused && dt > 0) {
         const addedMinutes = dt * 4.0;
         state.timeMinutes += addedMinutes;
         state.hoursAwake += addedMinutes / 60;
@@ -5124,7 +5126,7 @@
       if (lanternMat) lanternMat.emissiveIntensity = nightFactor * 1.5;
       windowGlowMaterials.forEach(mat => { mat.emissiveIntensity = nightFactor * 1.2; });
 
-      uiClock.textContent = info.clockStr;
+      uiClock.textContent = paused ? `${info.clockStr} ⏸️` : info.clockStr;
       uiPhase.textContent = info.phase;
       uiPhaseIcon.textContent = info.icon;
 
@@ -5707,9 +5709,10 @@
       const dt = Math.min(clock.getDelta(), 0.05);
       const elapsed = clock.elapsedTime;
 
-      const nightFactor = updateDayNightCycle(dt) || 0;
+      const paused = isTimePaused();
+      const nightFactor = updateDayNightCycle(paused ? 0 : dt) || 0;
 
-      if (!state.isPaused) {
+      if (!paused) {
         updateFarmer(dt);
         updateCourier(dt);
         updateFishing(dt, elapsed);
@@ -5753,67 +5756,70 @@
         t.group.rotation.z = Math.sin(elapsed * 1.2 + t.phase) * 0.018;
       });
 
-      const timeNow = getTimeInfo(state.timeMinutes);
-      const isNightTime = timeNow.h >= 19 || timeNow.h < 5;
+      // Hewan hanya bergerak & berjalan tidur ketika tidak sedang membuka popup
+      if (!paused) {
+        const timeNow = getTimeInfo(state.timeMinutes);
+        const isNightTime = timeNow.h >= 19 || timeNow.h < 5;
 
-      animals.forEach(a => {
-        if (a.happyBounce > 0) a.happyBounce = Math.max(0, a.happyBounce - dt * 2.5);
+        animals.forEach(a => {
+          if (a.happyBounce > 0) a.happyBounce = Math.max(0, a.happyBounce - dt * 2.5);
 
-        if (isNightTime) {
-          const dx = a.sleepSpot.x - a.group.position.x;
-          const dz = a.sleepSpot.z - a.group.position.z;
-          const dist = Math.hypot(dx, dz);
+          if (isNightTime) {
+            const dx = a.sleepSpot.x - a.group.position.x;
+            const dz = a.sleepSpot.z - a.group.position.z;
+            const dist = Math.hypot(dx, dz);
 
-          if (dist > 0.12) {
+            if (dist > 0.12) {
+              a.isSleeping = false;
+              a.group.scale.y = 1;
+              const step = Math.min(dist, a.speed * dt);
+              a.group.position.x += (dx / dist) * step;
+              a.group.position.z += (dz / dist) * step;
+              a.group.rotation.y = Math.atan2(-dz, dx);
+              a.hopPhase += dt * 9;
+              a.group.position.y = Math.abs(Math.sin(a.hopPhase)) * 0.09;
+            } else {
+              a.isSleeping = true;
+              a.group.position.y = a.sleepOffsetY;
+              a.group.scale.y = 0.86 + Math.sin(elapsed * 2.4 + a.sleepSpot.x) * 0.035;
+              a.zzzTimer -= dt;
+              if (a.zzzTimer <= 0) {
+                spawnZzz(a.group.position.x, 0.95, a.group.position.z);
+                a.zzzTimer = 2.4 + Math.random() * 1.6;
+              }
+            }
+            return;
+          }
+
+          if (a.isSleeping) {
             a.isSleeping = false;
             a.group.scale.y = 1;
+            a.group.position.y = 0;
+            a.waitTimer = 0.3;
+          }
+
+          const dx = a.targetX - a.group.position.x;
+          const dz = a.targetZ - a.group.position.z;
+          const dist = Math.hypot(dx, dz);
+
+          if (dist > 0.08) {
             const step = Math.min(dist, a.speed * dt);
             a.group.position.x += (dx / dist) * step;
             a.group.position.z += (dz / dist) * step;
             a.group.rotation.y = Math.atan2(-dz, dx);
-            a.hopPhase += dt * 9;
-            a.group.position.y = Math.abs(Math.sin(a.hopPhase)) * 0.09;
+            a.hopPhase += dt * 10;
+            a.group.position.y = Math.abs(Math.sin(a.hopPhase)) * 0.11 + Math.sin(a.happyBounce * Math.PI) * 0.32;
           } else {
-            a.isSleeping = true;
-            a.group.position.y = a.sleepOffsetY;
-            a.group.scale.y = 0.86 + Math.sin(elapsed * 2.4 + a.sleepSpot.x) * 0.035;
-            a.zzzTimer -= dt;
-            if (a.zzzTimer <= 0 && !state.isPaused) {
-              spawnZzz(a.group.position.x, 0.95, a.group.position.z);
-              a.zzzTimer = 2.4 + Math.random() * 1.6;
+            a.group.position.y = Math.sin(a.happyBounce * Math.PI) * 0.35;
+            a.waitTimer -= dt;
+            if (a.waitTimer <= 0) {
+              a.targetX = a.bounds.minX + Math.random() * (a.bounds.maxX - a.bounds.minX);
+              a.targetZ = a.bounds.minZ + Math.random() * (a.bounds.maxZ - a.bounds.minZ);
+              a.waitTimer = 2.0 + Math.random() * 3.5;
             }
           }
-          return;
-        }
-
-        if (a.isSleeping) {
-          a.isSleeping = false;
-          a.group.scale.y = 1;
-          a.group.position.y = 0;
-          a.waitTimer = 0.3;
-        }
-
-        const dx = a.targetX - a.group.position.x;
-        const dz = a.targetZ - a.group.position.z;
-        const dist = Math.hypot(dx, dz);
-
-        if (dist > 0.08) {
-          const step = Math.min(dist, a.speed * dt);
-          a.group.position.x += (dx / dist) * step;
-          a.group.position.z += (dz / dist) * step;
-          a.group.rotation.y = Math.atan2(-dz, dx);
-          a.hopPhase += dt * 10;
-          a.group.position.y = Math.abs(Math.sin(a.hopPhase)) * 0.11 + Math.sin(a.happyBounce * Math.PI) * 0.32;
-        } else {
-          a.group.position.y = Math.sin(a.happyBounce * Math.PI) * 0.35;
-          a.waitTimer -= dt;
-          if (a.waitTimer <= 0) {
-            a.targetX = a.bounds.minX + Math.random() * (a.bounds.maxX - a.bounds.minX);
-            a.targetZ = a.bounds.minZ + Math.random() * (a.bounds.maxZ - a.bounds.minZ);
-            a.waitTimer = 2.0 + Math.random() * 3.5;
-          }
-        }
-      });
+        });
+      }
 
       for (let i = floatingHearts.length - 1; i >= 0; i--) {
         const h = floatingHearts[i];
