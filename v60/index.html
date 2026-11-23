@@ -1,0 +1,2002 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>V60 Brew Guide &amp; Simulator — Panduan Seduh &amp; Kalibrasi Biji</title>
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Vue 3 (Global Production Build) via CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <script>
+    // Konfigurasi tema kertas hangat & kopi editorial untuk Tailwind CSS
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            paper: {
+              50: '#FDFBF7',
+              100: '#F7F2E8',
+              200: '#EDE4D5',
+              300: '#DFD2BC',
+            },
+            espresso: {
+              950: '#1B110B',
+              900: '#2A1B12',
+              800: '#3F2A1D',
+              700: '#5A3E2D',
+              600: '#785742',
+            },
+            terracotta: {
+              400: '#DF8B54',
+              500: '#C46830',
+              600: '#A65221',
+              700: '#843E18',
+            },
+            glacier: {
+              50: '#F0F9FF',
+              100: '#E0F2FE',
+              200: '#BAE6FD',
+              500: '#0EA5E9',
+              600: '#0284C7',
+              700: '#0369A1',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    [v-cloak] { display: none !important; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background-color: #F7F2E8;
+      color: #2A1B12;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Slider Kustom Taktil */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 8px;
+      border-radius: 9999px;
+      background: #DFD2BC;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 22px;
+      width: 22px;
+      border-radius: 50%;
+      background: #C46830;
+      border: 3px solid #FDFBF7;
+      box-shadow: 0 2px 6px rgba(27, 17, 11, 0.28);
+      margin-top: -7px;
+      transition: transform 0.15s ease, background-color 0.15s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+      background: #A65221;
+    }
+    input[type="range"]::-moz-range-track {
+      height: 8px;
+      border-radius: 9999px;
+      background: #DFD2BC;
+    }
+    input[type="range"]::-moz-range-thumb {
+      height: 22px;
+      width: 22px;
+      border-radius: 50%;
+      background: #C46830;
+      border: 3px solid #FDFBF7;
+      box-shadow: 0 2px 6px rgba(27, 17, 11, 0.28);
+    }
+
+    /* Animasi SVG V60 */
+    @keyframes pourStream {
+      0% { stroke-dashoffset: 24; }
+      100% { stroke-dashoffset: 0; }
+    }
+    @keyframes coffeeDrop {
+      0% { transform: translateY(0); opacity: 0.95; }
+      80% { opacity: 0.9; }
+      100% { transform: translateY(38px); opacity: 0; }
+    }
+    @keyframes steamRise {
+      0% { transform: translateY(4px); opacity: 0; }
+      40% { opacity: 0.55; }
+      100% { transform: translateY(-10px); opacity: 0; }
+    }
+    @keyframes iceFloat {
+      0%, 100% { transform: translateY(0px) rotate(0deg); }
+      50% { transform: translateY(-2.5px) rotate(2deg); }
+    }
+
+    .animate-pour {
+      stroke-dasharray: 6 6;
+      animation: pourStream 0.55s linear infinite;
+    }
+    .animate-drop-1 {
+      animation: coffeeDrop 0.95s ease-in infinite;
+    }
+    .animate-drop-2 {
+      animation: coffeeDrop 0.95s ease-in 0.45s infinite;
+    }
+    .animate-steam-1 {
+      animation: steamRise 2.4s ease-out infinite;
+    }
+    .animate-steam-2 {
+      animation: steamRise 2.4s ease-out 0.8s infinite;
+    }
+    .animate-steam-3 {
+      animation: steamRise 2.4s ease-out 1.6s infinite;
+    }
+    .animate-ice {
+      animation: iceFloat 3.2s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-paper-100 text-espresso-900 selection:bg-terracotta-400/30">
+
+  <div id="app" v-cloak class="min-h-screen flex flex-col">
+
+    <!-- ==================== HEADER ==================== -->
+    <header class="sticky top-0 z-30 bg-espresso-950/95 backdrop-blur-md text-paper-50 border-b border-espresso-800 shadow-sm">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <!-- Ikon V60 -->
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-terracotta-500 to-terracotta-700 flex items-center justify-center shadow-inner shrink-0">
+            <svg class="w-6 h-6 text-paper-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 5h16l-6 10h-4L4 5z" />
+              <path d="M8 15h8" />
+              <path d="M6 19h12" />
+              <path d="M18 7a2.5 2.5 0 0 1 0 5h-1.2" />
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-base sm:text-lg font-bold tracking-tight leading-tight">V60 Brew Guide &amp; Simulator</h1>
+            <p class="text-xs text-paper-300/80 hidden sm:block">Kalibrasi biji otomatis, rasio panas/es &amp; timer seduh interaktif</p>
+          </div>
+        </div>
+
+        <!-- Aksi Header -->
+        <div class="flex items-center gap-2">
+          <button @click="toggleSound" type="button" aria-label="Toggle suara notifikasi"
+            class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium bg-espresso-800 hover:bg-espresso-700 text-paper-100 transition border border-espresso-700">
+            <svg v-if="soundEnabled" class="w-4 h-4 text-terracotta-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+            </svg>
+            <svg v-else class="w-4 h-4 text-paper-300/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <line x1="23" y1="9" x2="17" y2="15"></line>
+              <line x1="17" y1="9" x2="23" y2="15"></line>
+            </svg>
+            <span class="hidden sm:inline">{{ soundEnabled ? 'Suara Aktif' : 'Suara Bisu' }}</span>
+          </button>
+
+          <button @click="copyRecipe" type="button"
+            class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-terracotta-600 hover:bg-terracotta-500 text-paper-50 transition shadow-sm active:scale-95">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span>Salin Resep</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ==================== MAIN CONTENT ==================== -->
+    <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 sm:py-8 space-y-6">
+
+      <!-- ==================== BAGIAN 1: PROFIL BIJI KOPI (AUTO-CALIBRATION) ==================== -->
+      <section class="bg-paper-50 rounded-2xl p-5 sm:p-6 shadow-sm border border-paper-300/80 space-y-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-paper-200 pb-3">
+          <div>
+            <h2 class="text-base sm:text-lg font-bold text-espresso-950 flex items-center gap-2">
+              <span class="w-2 h-6 rounded-full bg-terracotta-500 inline-block"></span>
+              Profil Biji Kopi &amp; Kalibrasi Otomatis
+            </h2>
+            <p class="text-xs text-espresso-600 mt-0.5">Pilih asal biji, proses, dan tingkat sangrai untuk menyesuaikan suhu, gilingan, dan rasio ideal.</p>
+          </div>
+          <span class="text-xs font-semibold px-3 py-1 rounded-full bg-terracotta-500/15 text-terracotta-700 border border-terracotta-500/20">
+            Auto-Calibration Aktif
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          <!-- Kiri: Selector Origin, Proses, Roast -->
+          <div class="lg:col-span-7 space-y-5">
+            <!-- 1. Origin Biji dengan Filter Wilayah -->
+            <div class="space-y-2.5">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <label class="text-xs font-bold uppercase tracking-wider text-espresso-700 block">1. Origin Biji Kopi</label>
+                <span class="text-[11px] font-medium text-espresso-600">{{ filteredOrigins.length }} pilihan</span>
+              </div>
+
+              <!-- Tab Filter Wilayah -->
+              <div class="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter wilayah origin kopi">
+                <button v-for="reg in regions" :key="reg" type="button" role="tab"
+                  :aria-selected="selectedRegion === reg"
+                  @click="selectedRegion = reg"
+                  :class="[
+                    'px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition border',
+                    selectedRegion === reg
+                      ? 'bg-terracotta-600 text-paper-50 border-terracotta-600 shadow-sm'
+                      : 'bg-paper-100 text-espresso-700 border-paper-300/80 hover:bg-paper-200/70'
+                  ]">
+                  {{ reg }}
+                </button>
+              </div>
+
+              <!-- Daftar Origin -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
+                <button v-for="o in filteredOrigins" :key="o.id" type="button"
+                  @click="selectOrigin(o.id)"
+                  :class="[
+                    'text-left p-2.5 rounded-xl border-2 transition active:scale-[0.98] flex flex-col justify-between gap-1',
+                    selectedOriginId === o.id
+                      ? 'bg-espresso-900 text-paper-50 border-espresso-900 shadow-sm'
+                      : 'bg-white text-espresso-900 border-paper-200 hover:border-paper-300'
+                  ]">
+                  <div>
+                    <div class="flex items-start justify-between gap-1.5">
+                      <span class="text-xs sm:text-[13px] font-bold leading-snug">{{ o.name }}</span>
+                    </div>
+                    <div :class="['text-[10px] font-mono mt-0.5', selectedOriginId === o.id ? 'text-terracotta-400' : 'text-terracotta-700']">
+                      {{ o.altitude }}
+                    </div>
+                  </div>
+                  <div :class="['text-[11px] leading-tight line-clamp-2', selectedOriginId === o.id ? 'text-paper-300' : 'text-espresso-600']">
+                    {{ o.shortNote }}
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <!-- 2. Proses Pascapanen -->
+            <div class="space-y-2">
+              <label class="text-xs font-bold uppercase tracking-wider text-espresso-700 block">2. Proses Pascapanen</label>
+              <div class="flex flex-wrap gap-2">
+                <button v-for="p in processes" :key="p.id" type="button"
+                  @click="selectProcess(p.id)"
+                  :class="[
+                    'px-3 py-2 rounded-xl border-2 text-xs font-semibold transition active:scale-[0.98]',
+                    selectedProcessId === p.id
+                      ? 'bg-terracotta-600 text-paper-50 border-terracotta-600 shadow-sm'
+                      : 'bg-white text-espresso-800 border-paper-200 hover:border-paper-300'
+                  ]">
+                  {{ p.name }}
+                </button>
+              </div>
+              <p class="text-xs text-espresso-600">{{ currentProcess.desc }}</p>
+            </div>
+
+            <!-- 3. Tingkat Sangrai (Roast Level) -->
+            <div class="space-y-2">
+              <label class="text-xs font-bold uppercase tracking-wider text-espresso-700 block">3. Tingkat Sangrai (Roast Level)</label>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button v-for="r in roasts" :key="r.id" type="button"
+                  @click="selectRoast(r.id)"
+                  :class="[
+                    'p-2.5 rounded-xl border-2 text-left transition active:scale-[0.98] flex flex-col justify-between',
+                    selectedRoastId === r.id
+                      ? 'bg-paper-200/80 border-terracotta-500 text-espresso-950 shadow-sm'
+                      : 'bg-white border-paper-200 text-espresso-700 hover:border-paper-300'
+                  ]">
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-3 h-3 rounded-full shrink-0 border border-black/10" :style="{ backgroundColor: r.swatch }"></span>
+                    <span class="text-xs font-bold">{{ r.name }}</span>
+                  </div>
+                  <div class="text-[11px] opacity-75 mt-1 font-mono">{{ r.tempRange }}</div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Kanan: Hasil Kalibrasi Otomatis & Tips Ekstraksi Spesifik Biji -->
+          <div class="lg:col-span-5 flex flex-col justify-between gap-4 bg-paper-100/90 rounded-2xl p-4 sm:p-5 border border-paper-300/70">
+            <div class="space-y-3.5">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-espresso-700">Hasil Kalibrasi Otomatis</h3>
+                <span class="font-mono text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white border border-paper-300 text-espresso-800 shrink-0">
+                  {{ currentOrigin.region }} &bull; {{ currentProcess.shortName }}
+                </span>
+              </div>
+
+              <!-- Info Origin Terpilih: Ketinggian & Flavor Notes -->
+              <div class="bg-white rounded-xl p-3 border border-paper-200 space-y-2">
+                <div class="flex flex-wrap items-center justify-between gap-1.5">
+                  <span class="text-sm font-bold text-espresso-950">{{ currentOrigin.name }}</span>
+                  <span class="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md bg-paper-100 text-terracotta-700 border border-paper-200">
+                    &#9968; {{ currentOrigin.altitude }}
+                  </span>
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                  <span v-for="note in currentOrigin.notes" :key="note"
+                    class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-terracotta-500/10 text-terracotta-700 border border-terracotta-500/20">
+                    {{ note }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- 3 Metrik Kalibrasi -->
+              <div class="grid grid-cols-3 gap-2.5">
+                <div class="bg-white rounded-xl p-3 border border-paper-200 shadow-sm">
+                  <div class="text-[10px] font-semibold uppercase text-espresso-600">Suhu Ideal</div>
+                  <div class="text-xl font-mono font-bold text-terracotta-600 mt-0.5 tabular-nums">{{ calibratedTemp }}&deg;C</div>
+                </div>
+                <div class="bg-white rounded-xl p-3 border border-paper-200 shadow-sm">
+                  <div class="text-[10px] font-semibold uppercase text-espresso-600">Rasio Rekom.</div>
+                  <div class="text-xl font-mono font-bold text-espresso-950 mt-0.5 tabular-nums">1:{{ recommendedRatio }}</div>
+                </div>
+                <div class="bg-white rounded-xl p-3 border border-paper-200 shadow-sm">
+                  <div class="text-[10px] font-semibold uppercase text-espresso-600">Mikron</div>
+                  <div class="text-xs font-mono font-bold text-espresso-900 mt-1.5 leading-tight">{{ calibratedGrind.microns }}</div>
+                </div>
+              </div>
+
+              <!-- Indikator Visual Ukuran Gilingan -->
+              <div class="bg-white rounded-xl p-3.5 border border-paper-200 space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase text-espresso-600">Ukuran Gilingan Disarankan</div>
+                    <div class="text-sm font-bold text-espresso-950">{{ calibratedGrind.label }}</div>
+                  </div>
+                  <span class="text-[11px] font-mono text-espresso-600 bg-paper-100 px-2 py-1 rounded-lg border border-paper-200">
+                    {{ calibratedGrind.clicks }}
+                  </span>
+                </div>
+                <!-- Visualisasi Tekstur Partikel Bubuk Kopi -->
+                <div class="flex items-center gap-2 pt-1">
+                  <span class="text-[10px] font-medium text-espresso-600">Halus</span>
+                  <div class="flex-1 grid grid-cols-5 gap-1.5 items-center">
+                    <div v-for="lvl in 5" :key="lvl"
+                      :class="[
+                        'h-2.5 rounded-full transition-all',
+                        lvl === calibratedGrind.level
+                          ? 'bg-terracotta-500 ring-2 ring-terracotta-500/30 scale-y-110'
+                          : 'bg-paper-200'
+                      ]">
+                    </div>
+                  </div>
+                  <span class="text-[10px] font-medium text-espresso-600">Kasar</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tips Ekstraksi Spesifik Biji -->
+            <div class="rounded-xl bg-espresso-900 text-paper-50 p-3.5 space-y-1.5 shadow-sm">
+              <div class="text-[11px] font-bold uppercase tracking-wider text-terracotta-400 flex items-center gap-1.5">
+                <span>&#9733;</span> Tips Ekstraksi Spesifik Biji
+              </div>
+              <p class="text-xs text-paper-100/95 leading-relaxed">
+                {{ dynamicBeanTip }}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== BAGIAN 2: PARAMETER SEDUH & SIMULATOR ==================== -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+        <!-- ==================== KOLOM KIRI: PARAMETER & RINGKASAN ==================== -->
+        <section class="lg:col-span-5 space-y-5">
+
+          <!-- Kartu Parameter Seduh -->
+          <div class="bg-paper-50 rounded-2xl p-5 sm:p-6 shadow-sm border border-paper-300/80 space-y-6">
+            <div class="flex items-center justify-between border-b border-paper-200 pb-3">
+              <h2 class="text-base font-bold text-espresso-950 flex items-center gap-2">
+                <span class="w-2 h-6 rounded-full bg-terracotta-500 inline-block"></span>
+                Parameter Seduh
+              </h2>
+              <span :class="[
+                'text-xs font-semibold px-2.5 py-1 rounded-full',
+                mode === 'iced' ? 'bg-glacier-100 text-glacier-700' : 'bg-terracotta-500/15 text-terracotta-700'
+              ]">
+                {{ mode === 'iced' ? 'Japanese Iced' : 'Mode Panas' }}
+              </span>
+            </div>
+
+            <!-- 1. Pilihan Mode Panas / Dingin -->
+            <div class="space-y-2">
+              <label class="text-sm font-semibold text-espresso-800 block">Sajian Kopi</label>
+              <div class="grid grid-cols-2 gap-2.5">
+                <button @click="setMode('hot')" type="button"
+                  :class="[
+                    'flex items-center justify-center gap-2 py-3 px-3 rounded-xl border-2 font-semibold text-sm transition active:scale-[0.98]',
+                    mode === 'hot'
+                      ? 'bg-terracotta-500/15 border-terracotta-500 text-terracotta-700 shadow-sm'
+                      : 'bg-white border-paper-300 text-espresso-700 hover:bg-paper-100'
+                  ]">
+                  <span class="text-base">&#9749;</span>
+                  <span>Panas (Hot)</span>
+                </button>
+                <button @click="setMode('iced')" type="button"
+                  :class="[
+                    'flex items-center justify-center gap-2 py-3 px-3 rounded-xl border-2 font-semibold text-sm transition active:scale-[0.98]',
+                    mode === 'iced'
+                      ? 'bg-glacier-50 border-glacier-500 text-glacier-700 shadow-sm'
+                      : 'bg-white border-paper-300 text-espresso-700 hover:bg-paper-100'
+                  ]">
+                  <span class="text-base">&#10052;&#65039;</span>
+                  <span>Dingin (Iced)</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Panel Opsi Es Batu (Khusus Mode Dingin) -->
+            <div v-if="mode === 'iced'" class="rounded-2xl bg-glacier-50 border border-glacier-500/30 p-4 space-y-3.5">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <h3 class="text-sm font-bold text-glacier-700 flex items-center gap-1.5">
+                    <span>&#129482;</span> Takaran Es Batu (Japanese Iced)
+                  </h3>
+                  <p class="text-xs text-espresso-700 mt-0.5">Masukkan es ke dalam server <strong>sebelum</strong> menyeduh.</p>
+                </div>
+                <div class="text-right shrink-0 bg-white px-3 py-1.5 rounded-xl border border-glacier-500/30 shadow-sm">
+                  <div class="text-[10px] uppercase tracking-wider font-semibold text-glacier-600">Es di Server</div>
+                  <div class="text-lg font-mono font-bold text-glacier-700 tabular-nums">{{ iceGrams }} g</div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-3 gap-2">
+                <button v-for="opt in iceOptions" :key="opt.pct" type="button"
+                  @click="setIcePercent(opt.pct)"
+                  :class="[
+                    'p-2 rounded-xl border text-center transition',
+                    icePercent === opt.pct
+                      ? 'bg-glacier-600 text-white border-glacier-600 shadow-sm'
+                      : 'bg-white text-espresso-800 border-glacier-500/30 hover:bg-glacier-100/70'
+                  ]">
+                  <div class="text-xs font-bold">{{ opt.label }}</div>
+                  <div class="text-[11px] opacity-85 font-mono">{{ opt.pct }}% Es</div>
+                </button>
+              </div>
+
+              <!-- Ringkasan Cairan Es vs Air Panas -->
+              <div class="grid grid-cols-3 gap-2 text-center bg-white/85 rounded-xl p-2.5 border border-glacier-200/70">
+                <div>
+                  <div class="text-[10px] text-espresso-600 uppercase">Total Sajian</div>
+                  <div class="font-mono font-bold text-xs text-espresso-900 tabular-nums">{{ totalLiquid }} ml</div>
+                </div>
+                <div class="border-x border-glacier-200/70">
+                  <div class="text-[10px] text-glacier-700 uppercase font-semibold">Es Batu</div>
+                  <div class="font-mono font-bold text-xs text-glacier-700 tabular-nums">{{ iceGrams }} g</div>
+                </div>
+                <div>
+                  <div class="text-[10px] text-terracotta-700 uppercase font-semibold">Air Panas</div>
+                  <div class="font-mono font-bold text-xs text-terracotta-700 tabular-nums">{{ hotWater }} ml</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Input Berat Biji Kopi -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <label for="input-coffee" class="text-sm font-semibold text-espresso-800">Berat Biji Kopi</label>
+                <div class="flex items-center gap-1.5">
+                  <button @click="setCoffeeGrams(coffeeGrams - 1)" type="button" aria-label="Kurangi 1 gram"
+                    class="w-9 h-9 rounded-xl bg-paper-200 hover:bg-paper-300 text-espresso-900 font-bold text-lg flex items-center justify-center transition active:scale-95">
+                    &minus;
+                  </button>
+                  <div class="relative">
+                    <input id="input-coffee" type="number" min="10" max="40" step="1"
+                      :value="coffeeGrams"
+                      @change="setCoffeeGrams($event.target.value)"
+                      class="w-20 text-center font-mono font-bold text-lg py-1.5 pr-5 pl-2 rounded-xl border border-paper-300 bg-white text-espresso-950 focus:outline-none focus:ring-2 focus:ring-terracotta-500 tabular-nums" />
+                    <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-espresso-600 pointer-events-none">g</span>
+                  </div>
+                  <button @click="setCoffeeGrams(coffeeGrams + 1)" type="button" aria-label="Tambah 1 gram"
+                    class="w-9 h-9 rounded-xl bg-paper-200 hover:bg-paper-300 text-espresso-900 font-bold text-lg flex items-center justify-center transition active:scale-95">
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <input type="range" min="10" max="40" step="1"
+                  :value="coffeeGrams"
+                  @input="setCoffeeGrams($event.target.value)"
+                  class="w-full" />
+                <div class="flex justify-between text-[11px] font-mono text-espresso-600 mt-1">
+                  <span>10g</span>
+                  <span>20g</span>
+                  <span>30g</span>
+                  <span>40g</span>
+                </div>
+              </div>
+
+              <!-- Tombol Cepat Berat Kopi -->
+              <div class="grid grid-cols-5 gap-1.5">
+                <button v-for="r in [14, 15, 15.5, 16, 17]" :key="r" type="button"
+                  @click="setManualRatio(r)"
+                  :class="[
+                    'py-2 rounded-xl text-xs font-mono font-bold border transition',
+                    ratio === r
+                      ? 'bg-espresso-900 text-paper-50 border-espresso-900 shadow-sm'
+                      : 'bg-white text-espresso-800 border-paper-300 hover:bg-paper-200/60'
+                  ]">
+                  1:{{ r }}
+                </button>
+              </div>
+            </div>
+
+            <!-- 4. Metode Seduh -->
+            <div class="space-y-2.5">
+              <label class="text-sm font-semibold text-espresso-800 block">Metode / Gaya Seduh</label>
+              <div class="space-y-2">
+                <div v-for="m in methods" :key="m.id" class="space-y-2">
+                  <button type="button"
+                    @click="selectMethod(m.id)"
+                    :class="[
+                      'w-full text-left p-3 rounded-xl border-2 transition flex items-start justify-between gap-2',
+                      method === m.id
+                        ? 'bg-paper-100 border-terracotta-500 text-espresso-950 shadow-sm'
+                        : 'bg-white border-paper-200 text-espresso-700 hover:border-paper-300'
+                    ]">
+                    <div>
+                      <div class="text-sm font-bold">{{ m.name }}</div>
+                      <div class="text-xs opacity-75 mt-0.5">{{ m.desc }}</div>
+                    </div>
+                    <span v-if="method === m.id" class="w-5 h-5 rounded-full bg-terracotta-500 text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">&#10003;</span>
+                    <span v-else class="w-5 h-5 rounded-full border-2 border-paper-300 inline-block shrink-0 mt-0.5"></span>
+                  </button>
+
+                  <!-- Sub-opsi Karakter Rasa khusus Tetsu Kasuya 4:6 -->
+                  <div v-if="m.id === 'kasuya' && method === 'kasuya'"
+                    class="rounded-xl bg-paper-100/90 border border-paper-300/80 p-3 space-y-2">
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-bold text-espresso-800">Karakter Rasa 40% Pertama (Kasuya 4:6)</span>
+                      <span class="text-[11px] font-mono text-terracotta-700 font-semibold">{{ currentKasuyaFlavor.splitLabel }}</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-1.5">
+                      <button v-for="kf in kasuyaFlavors" :key="kf.id" type="button"
+                        @click="selectKasuyaFlavor(kf.id)"
+                        :class="[
+                          'py-1.5 px-2 rounded-lg text-xs font-semibold border transition text-center',
+                          kasuyaFlavor === kf.id
+                            ? 'bg-terracotta-600 text-paper-50 border-terracotta-600 shadow-sm'
+                            : 'bg-white text-espresso-800 border-paper-300 hover:bg-paper-200/60'
+                        ]">
+                        {{ kf.name }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Kartu Ringkasan Resep -->
+          <div class="bg-espresso-900 text-paper-50 rounded-2xl p-5 sm:p-6 shadow-md space-y-4">
+            <div class="flex items-center justify-between border-b border-espresso-800 pb-3">
+              <h2 class="text-base font-bold flex items-center gap-2">
+                <span class="w-2 h-5 rounded-full bg-terracotta-400 inline-block"></span>
+                Ringkasan Resep
+              </h2>
+              <span class="font-mono text-xs px-2.5 py-1 rounded-lg bg-espresso-800 text-terracotta-400 font-semibold">
+                1:{{ ratio }}
+              </span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div class="bg-espresso-800/70 rounded-xl p-3 border border-espresso-700/60">
+                <div class="text-[11px] text-paper-300/80 uppercase tracking-wide">Total Kopi</div>
+                <div class="text-xl font-mono font-bold text-paper-50 mt-0.5 tabular-nums">{{ coffeeGrams }} g</div>
+              </div>
+
+              <div class="bg-espresso-800/70 rounded-xl p-3 border border-espresso-700/60">
+                <div class="text-[11px] text-paper-300/80 uppercase tracking-wide">Total Sajian</div>
+                <div class="text-xl font-mono font-bold text-paper-50 mt-0.5 tabular-nums">{{ totalLiquid }} ml</div>
+              </div>
+
+              <div class="bg-terracotta-700/40 rounded-xl p-3 border border-terracotta-500/40">
+                <div class="text-[11px] text-terracotta-400 uppercase tracking-wide font-semibold">Air Panas Seduh</div>
+                <div class="text-xl font-mono font-bold text-paper-50 mt-0.5 tabular-nums">{{ hotWater }} ml</div>
+              </div>
+
+              <div :class="[
+                'rounded-xl p-3 border transition-all',
+                mode === 'iced'
+                  ? 'bg-glacier-600/25 border-glacier-500/50'
+                  : 'bg-espresso-800/40 border-espresso-700/40'
+              ]">
+                <div :class="['text-[11px] uppercase tracking-wide font-semibold', mode === 'iced' ? 'text-glacier-100' : 'text-paper-300/60']">
+                  Es Batu di Server
+                </div>
+                <div :class="['text-xl font-mono font-bold mt-0.5 tabular-nums', mode === 'iced' ? 'text-white' : 'text-paper-300/60']">
+                  {{ mode === 'iced' ? iceGrams + ' g' : '—' }}
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 pt-1 text-center">
+              <div class="bg-espresso-950/60 rounded-xl p-2.5 border border-espresso-800">
+                <div class="text-[10px] text-paper-300/70 uppercase">Suhu Air</div>
+                <div class="text-sm font-mono font-bold text-terracotta-400 mt-0.5">{{ calibratedTemp }}&deg;C</div>
+              </div>
+              <div class="bg-espresso-950/60 rounded-xl p-2.5 border border-espresso-800">
+                <div class="text-[10px] text-paper-300/70 uppercase">Estimasi</div>
+                <div class="text-sm font-mono font-bold text-paper-50 mt-0.5 tabular-nums">{{ formatTime(totalDuration) }}</div>
+              </div>
+              <div class="bg-espresso-950/60 rounded-xl p-2.5 border border-espresso-800">
+                <div class="text-[10px] text-paper-300/70 uppercase">Gilingan</div>
+                <div class="text-xs font-semibold text-paper-100 mt-1 leading-tight">{{ calibratedGrind.shortLabel }}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== KOLOM KANAN: SIMULATOR & JADWAL LANGKAH ==================== -->
+        <section class="lg:col-span-7 space-y-5">
+
+          <!-- Kartu Simulator Timer Interaktif -->
+          <div class="bg-paper-50 rounded-2xl p-5 sm:p-6 shadow-sm border border-paper-300/80 space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-paper-200 pb-3">
+              <h2 class="text-base font-bold text-espresso-950 flex items-center gap-2">
+                <span class="w-2 h-6 rounded-full bg-terracotta-500 inline-block"></span>
+                Simulator Timer Seduh
+              </h2>
+              <span :class="statusBadgeClass" class="text-xs font-semibold px-3 py-1 rounded-full">
+                {{ statusBadgeText }}
+              </span>
+            </div>
+
+            <!-- Visualisasi SVG V60 + Panel Timer -->
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-5 items-center">
+
+              <!-- Visualisasi SVG Dinamis -->
+              <div class="sm:col-span-5 flex flex-col items-center justify-center bg-paper-100/90 rounded-2xl p-4 border border-paper-200 relative overflow-hidden">
+                <svg viewBox="0 0 200 230" class="w-40 sm:w-44 h-auto drop-shadow-sm" aria-label="Visualisasi V60 Dripper dan Server">
+                  <defs>
+                    <clipPath id="server-clip">
+                      <path d="M58 128 L142 128 L158 195 Q160 212 142 212 L58 212 Q40 212 42 195 Z" />
+                    </clipPath>
+                    <linearGradient id="coffee-grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="#8B4822" />
+                      <stop offset="100%" stop-color="#2D150A" />
+                    </linearGradient>
+                    <linearGradient id="glass-shine" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.45" />
+                      <stop offset="35%" stop-color="#FFFFFF" stop-opacity="0.05" />
+                      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.2" />
+                    </linearGradient>
+                  </defs>
+
+                  <!-- Uap hangat (Mode Panas saat menyeduh / selesai) -->
+                  <g :class="['transition-opacity duration-500', (mode === 'hot' && (isRunning || elapsedSeconds > 0)) ? 'opacity-100' : 'opacity-0']"
+                    stroke="#A65221" stroke-width="2" fill="none" stroke-linecap="round">
+                    <path class="animate-steam-1" d="M84 36 Q80 26 86 18" />
+                    <path class="animate-steam-2" d="M100 32 Q105 22 99 12" />
+                    <path class="animate-steam-3" d="M116 36 Q120 26 114 18" />
+                  </g>
+
+                  <!-- Aliran Air Tuangan (saat tahap tuang aktif) -->
+                  <g :class="['transition-opacity duration-300', isPouringNow ? 'opacity-100' : 'opacity-0']">
+                    <path d="M132 10 Q106 16 100 58" fill="none" stroke="#60A5FA" stroke-width="3.5" stroke-linecap="round" class="animate-pour" />
+                    <circle cx="100" cy="60" r="3.5" fill="#93C5FD" opacity="0.7" />
+                  </g>
+
+                  <!-- Isi Server Kaca -->
+                  <g clip-path="url(#server-clip)">
+                    <rect x="35" y="125" width="130" height="92" fill="#FDFBF7" opacity="0.7" />
+
+                    <!-- Level Kopi Cair -->
+                    <rect x="35" :y="svgLiquidY" width="130" :height="svgLiquidHeight" fill="url(#coffee-grad)"
+                      style="transition: y 0.35s linear, height 0.35s linear;" />
+
+                    <!-- Permukaan Kopi -->
+                    <ellipse cx="100" :cy="svgLiquidY" rx="58" ry="3.5" fill="#B86634"
+                      :opacity="svgLiquidHeight > 2 ? 0.85 : 0"
+                      style="transition: cy 0.35s linear, opacity 0.3s ease;" />
+
+                    <!-- Es Batu (Khusus Mode Dingin) -->
+                    <g :class="['transition-opacity duration-300', mode === 'iced' ? 'opacity-100' : 'opacity-0']">
+                      <g class="animate-ice">
+                        <rect x="60" y="182" width="22" height="20" rx="4" fill="#BAE6FD" stroke="#7DD3FC" stroke-width="1.5" opacity="0.88" transform="rotate(-8 71 192)" />
+                        <rect x="86" y="185" width="24" height="21" rx="4" fill="#E0F2FE" stroke="#7DD3FC" stroke-width="1.5" opacity="0.9" transform="rotate(6 98 195)" />
+                        <rect x="113" y="180" width="22" height="20" rx="4" fill="#BAE6FD" stroke="#7DD3FC" stroke-width="1.5" opacity="0.88" transform="rotate(-12 124 190)" />
+                        <rect x="74" y="166" width="20" height="18" rx="4" fill="#E0F2FE" stroke="#7DD3FC" stroke-width="1.5" opacity="0.82" transform="rotate(14 84 175)" />
+                        <rect x="100" y="167" width="21" height="18" rx="4" fill="#BAE6FD" stroke="#7DD3FC" stroke-width="1.5" opacity="0.82" transform="rotate(-6 110 176)" />
+                      </g>
+                    </g>
+                  </g>
+
+                  <!-- Tetesan Kopi -->
+                  <g :class="['transition-opacity duration-300', (isRunning && !isFinished) ? 'opacity-100' : 'opacity-0']">
+                    <circle cx="100" cy="126" r="2.6" fill="#5C2D16" class="animate-drop-1" />
+                    <circle cx="100" cy="126" r="2.2" fill="#7C4321" class="animate-drop-2" />
+                  </g>
+
+                  <!-- Garis Luar Server Kaca & Pegangan -->
+                  <path d="M148 140 C174 140 176 184 154 192" fill="none" stroke="#5A3E2D" stroke-width="4" stroke-linecap="round" />
+                  <path d="M58 128 L142 128 L158 195 Q160 212 142 212 L58 212 Q40 212 42 195 Z" fill="url(#glass-shine)" stroke="#5A3E2D" stroke-width="3" stroke-linejoin="round" />
+                  <line x1="56" y1="158" x2="66" y2="158" stroke="#785742" stroke-width="1.5" opacity="0.6" />
+                  <line x1="53" y1="176" x2="65" y2="176" stroke="#785742" stroke-width="1.5" opacity="0.6" />
+                  <line x1="51" y1="194" x2="63" y2="194" stroke="#785742" stroke-width="1.5" opacity="0.6" />
+
+                  <!-- Kertas Filter & Bubuk Kopi -->
+                  <polygon points="55,46 145,46 105,112 95,112" fill="#FFFDF9" stroke="#DFD2BC" stroke-width="1.5" />
+                  <path d="M77 82 Q100 76 123 82 L106 111 L94 111 Z" fill="#4A2C1D" />
+
+                  <!-- Kerucut V60 Dripper -->
+                  <path d="M50 52 L150 52 L108 118 L92 118 Z" fill="#C46830" fill-opacity="0.18" stroke="#A65221" stroke-width="3" stroke-linejoin="round" />
+                  <path d="M68 62 Q86 84 96 108" fill="none" stroke="#C46830" stroke-width="1.4" opacity="0.55" />
+                  <path d="M132 62 Q114 84 104 108" fill="none" stroke="#C46830" stroke-width="1.4" opacity="0.55" />
+                  <path d="M144 60 C162 60 162 88 134 90" fill="none" stroke="#A65221" stroke-width="3" stroke-linecap="round" />
+                  <rect x="46" y="118" width="108" height="8" rx="4" fill="#3F2A1D" />
+                </svg>
+
+                <div class="mt-2 text-center">
+                  <div class="text-[11px] text-espresso-600 font-medium">Target Timbangan</div>
+                  <div class="font-mono font-bold text-lg text-espresso-950 tabular-nums">
+                    {{ isFinished ? hotWater : activeStep.cumulative }} / {{ hotWater }} g
+                  </div>
+                </div>
+              </div>
+
+              <!-- Panel Timer & Instruksi Tahap Aktif -->
+              <div class="sm:col-span-7 flex flex-col justify-between space-y-4">
+                <div class="text-center sm:text-left">
+                  <div class="text-xs font-semibold uppercase tracking-wider text-espresso-600">Waktu Berjalan</div>
+                  <div class="flex items-baseline justify-center sm:justify-start gap-2 mt-1">
+                    <span class="font-mono font-bold text-5xl sm:text-6xl text-espresso-950 tracking-tight tabular-nums">{{ formatTime(elapsedSeconds) }}</span>
+                    <span class="font-mono text-base font-medium text-espresso-600 tabular-nums">/ {{ formatTime(totalDuration) }}</span>
+                  </div>
+                </div>
+
+                <!-- Progress Bar Keseluruhan -->
+                <div class="space-y-1.5">
+                  <div class="flex justify-between text-xs font-medium text-espresso-700">
+                    <span>Progres Total</span>
+                    <span class="font-mono tabular-nums">{{ overallPct }}%</span>
+                  </div>
+                  <div class="w-full h-2.5 bg-paper-200 rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-terracotta-500 to-terracotta-600 rounded-full transition-all duration-300" :style="{ width: overallPct + '%' }"></div>
+                  </div>
+                </div>
+
+                <!-- Kartu Tahap Aktif -->
+                <div class="rounded-2xl bg-espresso-900 text-paper-50 p-4 space-y-2.5 shadow-sm">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-sm font-bold text-terracotta-400">
+                      {{ isFinished ? 'Selesai! Selamat Menikmati' : `Tahap ${activeStepIndex + 1}: ${activeStep.name}` }}
+                    </span>
+                    <span class="font-mono text-xs px-2 py-0.5 rounded-md bg-espresso-800 text-paper-100 tabular-nums">
+                      {{ isFinished ? '100%' : `Sisa ${stepRemainingSeconds} dtk` }}
+                    </span>
+                  </div>
+
+                  <div class="text-base sm:text-lg font-bold leading-snug">
+                    <template v-if="isFinished">
+                      {{ mode === 'iced' ? `Total ${totalLiquid} ml (${hotWater} ml kopi + ${iceGrams} g es)` : `Total ${hotWater} ml kopi siap disajikan` }}
+                    </template>
+                    <template v-else-if="activeStep.amount > 0">
+                      Tuang +{{ activeStep.amount }} ml &rarr; Target: {{ activeStep.cumulative }} g
+                    </template>
+                    <template v-else>
+                      Tunggu tetesan selesai (Target {{ activeStep.cumulative }} g)
+                    </template>
+                  </div>
+
+                  <p class="text-xs text-paper-200/90 leading-relaxed">
+                    {{ isFinished
+                      ? (mode === 'iced' ? 'Goyangkan server perlahan agar es mencair seimbang dan aroma segar kopi terkunci sempurna.' : 'Goyangkan server perlahan (swirl) agar lapisan ekstraksi menyatu sebelum dituang ke cangkir.')
+                      : activeStep.tip }}
+                  </p>
+
+                  <div class="w-full h-1.5 bg-espresso-800 rounded-full overflow-hidden">
+                    <div class="h-full bg-terracotta-400 rounded-full transition-all duration-200" :style="{ width: (isFinished ? 100 : stepProgressPct) + '%' }"></div>
+                  </div>
+                </div>
+
+                <!-- Pratinjau Tahap Selanjutnya -->
+                <div v-if="!isFinished" class="flex items-center justify-between text-xs bg-paper-100 border border-paper-200 rounded-xl px-3.5 py-2.5 text-espresso-700">
+                  <span class="font-medium">Selanjutnya:</span>
+                  <span class="font-semibold text-espresso-950 text-right">
+                    <template v-if="nextStep">
+                      {{ nextStep.name }}
+                      <span v-if="nextStep.amount > 0" class="font-mono">(+{{ nextStep.amount }} ml &rarr; {{ nextStep.cumulative }} g)</span>
+                      <span v-else class="font-mono">({{ formatTime(nextStep.start) }})</span>
+                    </template>
+                    <template v-else>Selesai &amp; siap disajikan</template>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Kontrol Timer -->
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+              <button @click="toggleStartPause" type="button"
+                class="flex-1 min-w-[140px] py-3.5 px-5 rounded-xl bg-terracotta-600 hover:bg-terracotta-500 text-paper-50 font-bold text-sm sm:text-base shadow-sm transition active:scale-[0.98] flex items-center justify-center gap-2">
+                <svg v-if="!isRunning" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                <svg v-else class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                <span>{{ isRunning ? 'Jeda' : (isFinished ? 'Seduh Ulang' : (elapsedSeconds > 0 ? 'Lanjutkan' : 'Mulai Seduh')) }}</span>
+              </button>
+
+              <button @click="resetTimer(false)" type="button"
+                class="py-3.5 px-4 rounded-xl bg-paper-200 hover:bg-paper-300 text-espresso-900 font-semibold text-sm transition active:scale-[0.98] flex items-center justify-center gap-1.5">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                </svg>
+                <span>Reset</span>
+              </button>
+
+              <button @click="prevStep" type="button" title="Tahap sebelumnya" aria-label="Tahap sebelumnya"
+                class="py-3.5 px-3.5 rounded-xl bg-white hover:bg-paper-100 text-espresso-800 border border-paper-300 font-semibold text-sm transition active:scale-[0.98] flex items-center justify-center">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="19 20 9 12 19 4 19 20" />
+                  <line x1="5" y1="19" x2="5" y2="5" />
+                </svg>
+              </button>
+
+              <button @click="skipToNextStep" type="button" title="Lompat ke tahap berikutnya" aria-label="Tahap berikutnya"
+                class="py-3.5 px-3.5 rounded-xl bg-white hover:bg-paper-100 text-espresso-800 border border-paper-300 font-semibold text-sm transition active:scale-[0.98] flex items-center justify-center gap-1">
+                <span class="hidden sm:inline">Lewati</span>
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="5 4 15 12 5 20 5 4" />
+                  <line x1="19" y1="5" x2="19" y2="19" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Kartu Jadwal Langkah Seduh -->
+          <div class="bg-paper-50 rounded-2xl p-5 sm:p-6 shadow-sm border border-paper-300/80 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-paper-200 pb-3">
+              <div>
+                <h2 class="text-base font-bold text-espresso-950 flex items-center gap-2">
+                  <span class="w-2 h-6 rounded-full bg-terracotta-500 inline-block"></span>
+                  Jadwal &amp; Langkah Seduh
+                </h2>
+                <p class="text-xs text-espresso-600 mt-0.5">Klik tahap mana saja untuk melompat ke waktu tersebut</p>
+              </div>
+            </div>
+
+            <!-- Panduan Tare Timbangan (Khusus Mode Dingin) -->
+            <div v-if="mode === 'iced'" class="rounded-xl bg-glacier-50 border border-glacier-500/30 p-3.5 text-xs text-espresso-800 space-y-1.5">
+              <div class="font-bold text-glacier-700 flex items-center gap-1.5">
+                <span>&#128161;</span> Panduan Tare Timbangan (Japanese Iced):
+              </div>
+              <ol class="list-decimal list-inside space-y-0.5 text-espresso-800">
+                <li>Masukkan <strong class="font-mono text-glacier-700">{{ iceGrams }} g es batu</strong> ke dalam server.</li>
+                <li>Pasang dripper &amp; masukkan <strong class="font-mono">{{ coffeeGrams }} g</strong> bubuk kopi (bilas filter di wadah terpisah).</li>
+                <li>Tekan <strong>TARE (0.0 g)</strong> pada timbangan sebelum mulai menyeduh.</li>
+                <li>Tuang air panas bertahap sesuai jadwal hingga mencapai <strong class="font-mono text-terracotta-700">{{ hotWater }} ml ({{ hotWater }} g)</strong>.</li>
+              </ol>
+            </div>
+
+            <!-- Daftar Langkah -->
+            <div class="space-y-2.5">
+              <button v-for="(step, idx) in steps" :key="step.index" type="button"
+                :id="'brew-step-' + idx"
+                @click="jumpToStep(idx)"
+                :class="[
+                  'w-full text-left rounded-2xl p-3.5 sm:p-4 border-2 transition flex flex-col gap-2',
+                  (!isFinished && idx === activeStepIndex && (isRunning || elapsedSeconds > 0))
+                    ? 'bg-terracotta-500/10 border-terracotta-500 ring-2 ring-terracotta-500/20 shadow-sm'
+                    : (isFinished || elapsedSeconds >= step.end)
+                      ? 'bg-paper-100/70 border-paper-200 opacity-75'
+                      : 'bg-white border-paper-200 hover:border-paper-300'
+                ]">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center gap-2.5">
+                    <span :class="[
+                      'w-6 h-6 rounded-full text-xs font-mono font-bold flex items-center justify-center shrink-0',
+                      (!isFinished && idx === activeStepIndex && (isRunning || elapsedSeconds > 0))
+                        ? 'bg-terracotta-600 text-white'
+                        : (isFinished || elapsedSeconds >= step.end)
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-paper-200 text-espresso-800'
+                    ]">
+                      {{ (isFinished || elapsedSeconds >= step.end) ? '✓' : idx + 1 }}
+                    </span>
+                    <span class="font-bold text-sm text-espresso-950">{{ step.name }}</span>
+                  </div>
+                  <span class="font-mono text-xs font-semibold text-espresso-700 bg-paper-100 px-2.5 py-1 rounded-lg border border-paper-200 tabular-nums">
+                    {{ formatTime(step.start) }} &ndash; {{ formatTime(step.end) }}
+                  </span>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 pl-8">
+                  <span v-if="step.amount > 0" class="font-mono text-xs font-bold px-2 py-0.5 rounded-lg bg-terracotta-500/15 text-terracotta-700">
+                    +{{ step.amount }} ml
+                  </span>
+                  <span v-else class="font-mono text-xs font-semibold px-2 py-0.5 rounded-lg bg-paper-200 text-espresso-700">
+                    Drawdown
+                  </span>
+                  <span class="text-xs text-espresso-600">Target Timbangan:</span>
+                  <span class="font-mono text-xs font-bold text-espresso-950 tabular-nums">{{ step.cumulative }} g</span>
+                </div>
+
+                <p class="text-xs text-espresso-700 leading-relaxed pl-8">{{ step.tip }}</p>
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- ==================== FOOTER ==================== -->
+    <footer class="mt-8 border-t border-paper-300/70 bg-paper-200/40 py-5 text-center text-xs text-espresso-600 px-4">
+      <p><strong>V60 Brew Guide &amp; Simulator</strong> &bull; Kalibrasi presisi untuk setiap karakter biji kopi Anda.</p>
+    </footer>
+
+    <!-- ==================== TOAST NOTIFICATION ==================== -->
+    <div role="status" aria-live="polite"
+      :class="[
+        'fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-espresso-950 text-paper-50 px-4 py-2.5 rounded-xl shadow-lg border border-espresso-700 text-sm font-medium flex items-center gap-2 transition-all duration-300',
+        toastVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
+      ]">
+      <span class="text-terracotta-400">&#10003;</span>
+      <span>{{ toastMessage }}</span>
+    </div>
+
+  </div>
+
+  <!-- ==================== VUE 3 APPLICATION LOGIC ==================== -->
+  <script>
+    (function () {
+      'use strict';
+
+      const { createApp, ref, computed, watch, nextTick } = Vue;
+
+      createApp({
+        setup() {
+          // ==================== DATA REFERENSI PROFIL BIJI ====================
+          const regions = ['Semua', 'Sumatera', 'Jawa', 'Bali & NTT', 'Sulawesi & Papua', 'Lainnya'];
+
+          const origins = [
+            {
+              id: 'kerinci',
+              name: 'Kerinci (Jambi)',
+              region: 'Sumatera',
+              altitude: '1.400–1.700 mdpl',
+              shortNote: 'Sweet, fruity (citrus/berry), clean, bright',
+              notes: ['Sweet', 'Citrus', 'Berry', 'Clean', 'Bright Acidity'],
+              defaultProcess: 'honey',
+              defaultRoast: 'medium-light',
+              tempOffset: 1,
+              grindOffset: 0,
+              ratioDefault: 15.5,
+              tip: 'Kerinci dikenal manis dengan keasaman buah yang cerah. Gunakan tuangan melingkar stabil untuk menonjolkan sweetness dan kejernihan rasanya.'
+            },
+            {
+              id: 'gayo',
+              name: 'Aceh Gayo (Aceh)',
+              region: 'Sumatera',
+              altitude: '1.200–1.600 mdpl',
+              shortNote: 'Full body, spicy, herbal, caramel/earthy',
+              notes: ['Full Body', 'Spicy', 'Herbal', 'Caramel', 'Earthy'],
+              defaultProcess: 'semi-washed',
+              defaultRoast: 'medium',
+              tempOffset: -1,
+              grindOffset: 1,
+              ratioDefault: 15,
+              tip: 'Aceh Gayo memiliki body penuh dan karakter rempah. Lembutkan aliran tuangan dan jaga gilingan sedikit lebih kasar agar hasil seduhan bersih dan tidak muddy.'
+            },
+            {
+              id: 'mandailing',
+              name: 'Mandailing / Lintong (Sumut)',
+              region: 'Sumatera',
+              altitude: '1.200–1.500 mdpl',
+              shortNote: 'Heavy body, dark chocolate, herbal',
+              notes: ['Heavy Body', 'Dark Chocolate', 'Herbal', 'Low-Med Acidity'],
+              defaultProcess: 'semi-washed',
+              defaultRoast: 'medium',
+              tempOffset: -1.5,
+              grindOffset: 1,
+              ratioDefault: 15,
+              tip: 'Mandailing & Lintong kaya body dan cokelat pekat. Suhu sedikit lebih rendah mencegah rasa pahit berlebih dan menjaga manis cokelat tetap lembut.'
+            },
+            {
+              id: 'preanger',
+              name: 'Java Preanger / Puntang (Jabar)',
+              region: 'Jawa',
+              altitude: '1.300–1.700 mdpl',
+              shortNote: 'Floral, sweet berry, tea-like, bright',
+              notes: ['Floral', 'Sweet Berry', 'Stone Fruit', 'Tea-like', 'Clean'],
+              defaultProcess: 'washed',
+              defaultRoast: 'light',
+              tempOffset: 1,
+              grindOffset: -0.5,
+              ratioDefault: 16,
+              tip: 'Java Preanger / Puntang punya aroma bunga dan buah yang elegan. Suhu air hangat dan gilingan sedikit lebih halus membantu mengangkat karakter tea-like yang jernih.'
+            },
+            {
+              id: 'gununghalu',
+              name: 'Gunung Halu / Ciwidey (Jabar)',
+              region: 'Jawa',
+              altitude: '1.200–1.500 mdpl',
+              shortNote: 'Sweet caramel, mild citrus, floral, smooth',
+              notes: ['Sweet Caramel', 'Mild Citrus', 'Floral', 'Smooth Body'],
+              defaultProcess: 'honey',
+              defaultRoast: 'medium-light',
+              tempOffset: 0,
+              grindOffset: 0,
+              ratioDefault: 15.5,
+              tip: 'Gunung Halu & Ciwidey menyajikan manis karamel halus dengan sentuhan citrus lembut. Sangat cocok diseduh dengan aliran konsisten pada rasio seimbang.'
+            },
+            {
+              id: 'temanggung',
+              name: 'Temanggung / Sindoro (Jateng)',
+              region: 'Jawa',
+              altitude: '1.300–1.600 mdpl',
+              shortNote: 'Brown sugar, mild spice, chocolate',
+              notes: ['Brown Sugar', 'Mild Spice', 'Chocolate', 'Balanced Body'],
+              defaultProcess: 'natural',
+              defaultRoast: 'medium',
+              tempOffset: -0.5,
+              grindOffset: 0,
+              ratioDefault: 15,
+              tip: 'Temanggung & Sindoro menonjolkan manis gula aren dan rempah ringan. Suhu moderat menjaga aftertaste cokelatnya tetap halus dan manis.'
+            },
+            {
+              id: 'ijen',
+              name: 'Ijen Raung (Jatim)',
+              region: 'Jawa',
+              altitude: '1.100–1.600 mdpl',
+              shortNote: 'Chocolate, nutty, caramel, mild citrus',
+              notes: ['Chocolate', 'Nutty', 'Sweet Caramel', 'Mild Citrus', 'Clean'],
+              defaultProcess: 'washed',
+              defaultRoast: 'medium-light',
+              tempOffset: 0,
+              grindOffset: 0,
+              ratioDefault: 15.5,
+              tip: 'Ijen Raung menawarkan keseimbangan cokelat, kacang, dan sentuhan citrus bersih. Parameter standar V60 langsung menonjolkan karakternya yang nyaman.'
+            },
+            {
+              id: 'bali',
+              name: 'Bali Kintamani (Bali)',
+              region: 'Bali & NTT',
+              altitude: '1.200–1.500 mdpl',
+              shortNote: 'Fresh citrus, sweet, clean, light-medium',
+              notes: ['Fresh Citrus', 'Sweet', 'Clean', 'Light-Med Body'],
+              defaultProcess: 'washed',
+              defaultRoast: 'medium-light',
+              tempOffset: 0,
+              grindOffset: 0,
+              ratioDefault: 15.5,
+              tip: 'Bali Kintamani terkenal dengan kesegaran jeruk/citrus dan manis yang bersih. Sangat nikmat baik untuk sajian Panas maupun Japanese Iced.'
+            },
+            {
+              id: 'flores',
+              name: 'Flores Bajawa / Manggarai (NTT)',
+              region: 'Bali & NTT',
+              altitude: '1.200–1.600 mdpl',
+              shortNote: 'Nutty, chocolatey, sweet floral, spice',
+              notes: ['Nutty', 'Chocolatey', 'Sweet Floral', 'Gentle Spice'],
+              defaultProcess: 'washed',
+              defaultRoast: 'medium',
+              tempOffset: 0,
+              grindOffset: 0,
+              ratioDefault: 15.5,
+              tip: 'Flores Bajawa & Manggarai memadukan manis cokelat-kacang dengan aroma bunga dan rempah lembut. Jaga konsistensi suhu agar body dan manisnya seimbang.'
+            },
+            {
+              id: 'toraja',
+              name: 'Toraja Sapan / Kalosi (Sulsel)',
+              region: 'Sulawesi & Papua',
+              altitude: '1.400–1.800 mdpl',
+              shortNote: 'Spicy, herbal, dark chocolate, syrupy',
+              notes: ['Spicy', 'Herbal', 'Dark Chocolate', 'Syrupy Body', 'Complex'],
+              defaultProcess: 'semi-washed',
+              defaultRoast: 'medium',
+              tempOffset: -0.5,
+              grindOffset: 0.5,
+              ratioDefault: 15,
+              tip: 'Toraja Sapan & Kalosi punya body kental seperti sirup dengan kompleksitas rempah dan dark chocolate. Kurangi agitasi berlebih agar hasil tetap bersih.'
+            },
+            {
+              id: 'wamena',
+              name: 'Papua Wamena (Papua)',
+              region: 'Sulawesi & Papua',
+              altitude: '1.500–1.800 mdpl',
+              shortNote: 'Very clean, floral, sweet nutty, silky',
+              notes: ['Very Clean', 'Floral', 'Sweet Nutty', 'Mild Citrus', 'Silky Finish'],
+              defaultProcess: 'washed',
+              defaultRoast: 'medium-light',
+              tempOffset: 0.5,
+              grindOffset: 0,
+              ratioDefault: 16,
+              tip: 'Papua Wamena sangat bersih dengan sentuhan floral dan akhir rasa lembut (silky). Rasio 1:16 dengan suhu hangat membuka aroma halusnya secara maksimal.'
+            },
+            {
+              id: 'ethiopia',
+              name: 'Ethiopia / Kenya (Afrika)',
+              region: 'Lainnya',
+              altitude: '1.700–2.200 mdpl',
+              shortNote: 'High density, intense floral, jasmine/berry',
+              notes: ['High Density', 'Intense Floral', 'Jasmine/Berry', 'Tea-like', 'Banyak Fines'],
+              defaultProcess: 'washed',
+              defaultRoast: 'light',
+              tempOffset: 2,
+              grindOffset: 0.5,
+              ratioDefault: 16,
+              tip: 'Biji dataran sangat tinggi ini padat namun menghasilkan banyak bubuk halus (fines)—gunakan air panas, tuang perlahan, dan kurangi swirl agar kertas filter tidak mampet.'
+            },
+            {
+              id: 'general',
+              name: 'Umum / Blend',
+              region: 'Lainnya',
+              altitude: 'Standar',
+              shortNote: 'Profil netral & seimbang untuk Arabika harian',
+              notes: ['Balanced', 'Netral', 'Arabika Harian'],
+              defaultProcess: 'washed',
+              defaultRoast: 'medium-light',
+              tempOffset: 0,
+              grindOffset: 0,
+              ratioDefault: 15.5,
+              tip: 'Profil seimbang untuk berbagai biji Arabika harian. Jika cicipan pertama terasa terlalu asam, naikkan suhu 2°C atau haluskan gilingan 1–2 klik.'
+            }
+          ];
+
+          const processes = [
+            {
+              id: 'washed',
+              name: 'Washed',
+              shortName: 'Washed',
+              desc: 'Bersih (clean), keasaman jernih, dan tahan ekstraksi suhu tinggi.',
+              tempOffset: 1,
+              grindOffset: 0,
+              ratioOffset: 0,
+              tip: 'Proses Washed tahan terhadap suhu lebih tinggi untuk membuka karakter rasa yang bersih.'
+            },
+            {
+              id: 'honey',
+              name: 'Honey',
+              shortName: 'Honey',
+              desc: 'Manis alami, body sedang, ideal pada suhu air moderat.',
+              tempOffset: 0,
+              grindOffset: 0,
+              ratioOffset: 0,
+              tip: 'Proses Honey kaya gula alami yang cepat larut—suhu moderat menjaga manisnya tetap seimbang.'
+            },
+            {
+              id: 'natural',
+              name: 'Natural',
+              shortName: 'Natural',
+              desc: 'Fruity & berpori (porous), suhu diturunkan 1–2°C agar tidak sepat.',
+              tempOffset: -1.5,
+              grindOffset: 0.4,
+              ratioOffset: 0,
+              tip: 'Proses Natural lebih berpori sehingga suhu diturunkan agar manis buahnya menonjol tanpa rasa sepat.'
+            },
+            {
+              id: 'semi-washed',
+              name: 'Semi-Washed (Giling Basah)',
+              shortName: 'Giling Basah',
+              desc: 'Body tebal & kaya rempah, gilingan sedikit lebih kasar dan suhu lebih rendah.',
+              tempOffset: -1.5,
+              grindOffset: 0.8,
+              ratioOffset: -1,
+              tip: 'Giling Basah mudah terekstraksi berlebih—gilingan sedikit lebih kasar menjaga aftertaste tetap bersih.'
+            },
+            {
+              id: 'anaerobic',
+              name: 'Anaerobic / Wine',
+              shortName: 'Anaerobic',
+              desc: 'Sangat mudah larut, butuh suhu rendah (87–90°C) untuk hindari over-ekstraksi.',
+              tempOffset: -3,
+              grindOffset: 0.9,
+              ratioOffset: -1,
+              tip: 'Biji fermentasi Anaerobic/Wine sangat mudah larut—hindari agitasi kuat dan jaga suhu rendah agar tidak sepat.'
+            }
+          ];
+
+          const roasts = [
+            {
+              id: 'light',
+              name: 'Light',
+              tempRange: '92–94°C',
+              swatch: '#B97A4B',
+              baseTemp: 93,
+              grindBase: 1.6,
+              ratioBase: 16
+            },
+            {
+              id: 'medium-light',
+              name: 'Light-Medium',
+              tempRange: '90–92°C',
+              swatch: '#8C522B',
+              baseTemp: 91.5,
+              grindBase: 2.1,
+              ratioBase: 16
+            },
+            {
+              id: 'medium',
+              name: 'Medium',
+              tempRange: '89–91°C',
+              swatch: '#63371B',
+              baseTemp: 90,
+              grindBase: 2.7,
+              ratioBase: 15
+            },
+            {
+              id: 'medium-dark',
+              name: 'Medium-Dark',
+              tempRange: '86–88°C',
+              swatch: '#3B2010',
+              baseTemp: 87.5,
+              grindBase: 3.6,
+              ratioBase: 15
+            }
+          ];
+
+          const iceOptions = [
+            { pct: 35, label: 'Ringan' },
+            { pct: 40, label: 'Ideal ★' },
+            { pct: 45, label: 'Ekstra' }
+          ];
+
+          const methods = [
+            {
+              id: 'balanced',
+              name: 'Standar Seimbang (4 Tuangan)',
+              desc: 'Bloom 45 dtk + 3 tuangan terukur. Manis, bersih, konsisten harian.'
+            },
+            {
+              id: 'kasuya',
+              name: 'Tetsu Kasuya 4:6 (5 Tuangan)',
+              desc: '40% pertama atur manis/asam (2 tuangan), 60% kedua atur body (3 tuangan).'
+            },
+            {
+              id: 'fast',
+              name: 'Cepat & Clean (2 Tuangan)',
+              desc: 'Bloom 35 dtk + 1 tuangan utama lambat untuk hasil jernih & tea-like.'
+            }
+          ];
+
+          const kasuyaFlavors = [
+            { id: 'sweet', name: 'Manis', splitLabel: '15% + 25%', p1: 0.15, p2: 0.25 },
+            { id: 'balanced', name: 'Seimbang', splitLabel: '20% + 20%', p1: 0.20, p2: 0.20 },
+            { id: 'bright', name: 'Cerah', splitLabel: '25% + 15%', p1: 0.25, p2: 0.15 }
+          ];
+
+          // ==================== STATE REAKTIF ====================
+          const selectedRegion = ref('Semua');
+          const selectedOriginId = ref('kerinci');
+          const selectedProcessId = ref('honey');
+          const selectedRoastId = ref('medium-light');
+
+          const mode = ref('hot');          // 'hot' | 'iced'
+          const coffeeGrams = ref(15);
+          const icePercent = ref(40);       // 35 | 40 | 45
+          const ratio = ref(15.5);
+          const isRatioManual = ref(false);
+          const method = ref('balanced');   // 'balanced' | 'kasuya' | 'fast'
+          const kasuyaFlavor = ref('balanced'); // 'sweet' | 'balanced' | 'bright'
+
+          // Timer & Audio State
+          const soundEnabled = ref(true);
+          const isRunning = ref(false);
+          const elapsedSeconds = ref(0);
+          let lastAnnouncedStepIndex = -1;
+          let timerInterval = null;
+
+          // Toast State
+          const toastVisible = ref(false);
+          const toastMessage = ref('');
+          let toastTimer = null;
+
+          // ==================== COMPUTED: PROFIL BIJI & KALIBRASI ====================
+          const filteredOrigins = computed(() => {
+            if (selectedRegion.value === 'Semua') return origins;
+            return origins.filter(o => o.region === selectedRegion.value);
+          });
+
+          const currentOrigin = computed(() => origins.find(o => o.id === selectedOriginId.value) || origins[0]);
+          const currentProcess = computed(() => processes.find(p => p.id === selectedProcessId.value) || processes[0]);
+          const currentRoast = computed(() => roasts.find(r => r.id === selectedRoastId.value) || roasts[1]);
+          const currentKasuyaFlavor = computed(() => kasuyaFlavors.find(k => k.id === kasuyaFlavor.value) || kasuyaFlavors[1]);
+
+          // Suhu Air Ideal (°C) — dikalibrasi dari Roast + Origin + Process + Mode
+          const calibratedTemp = computed(() => {
+            const raw =
+              currentRoast.value.baseTemp +
+              currentOrigin.value.tempOffset +
+              currentProcess.value.tempOffset +
+              (mode.value === 'iced' ? 1 : 0);
+            return Math.round(Math.min(95, Math.max(85, raw)));
+          });
+
+          // Ukuran Gilingan Ideal — dikalibrasi dari Roast + Origin + Process + Method + Mode
+          const calibratedGrind = computed(() => {
+            const score =
+              currentRoast.value.grindBase +
+              currentOrigin.value.grindOffset +
+              currentProcess.value.grindOffset +
+              (method.value === 'kasuya' ? 0.7 : 0) +
+              (mode.value === 'iced' ? -0.35 : 0);
+
+            if (score <= 1.7) {
+              return { level: 1, label: 'Halus-Sedang (Fine-Medium)', shortLabel: 'Fine-Medium', microns: '550–650 µm', clicks: 'C40 ~20 / C2 ~16' };
+            }
+            if (score <= 2.45) {
+              return { level: 2, label: 'Sedang-Halus (Medium-Fine)', shortLabel: 'Medium-Fine', microns: '650–750 µm', clicks: 'C40 ~23 / C2 ~18' };
+            }
+            if (score <= 3.2) {
+              return { level: 3, label: 'Sedang (Medium)', shortLabel: 'Medium', microns: '750–850 µm', clicks: 'C40 ~26 / C2 ~20' };
+            }
+            if (score <= 4.0) {
+              return { level: 4, label: 'Sedang-Kasar (Medium-Coarse)', shortLabel: 'Med-Coarse', microns: '850–950 µm', clicks: 'C40 ~29 / C2 ~22' };
+            }
+            return { level: 5, label: 'Kasar-Sedang (Coarse-Medium)', shortLabel: 'Coarse-Med', microns: '950–1050 µm', clicks: 'C40 ~32 / C2 ~24' };
+          });
+
+          // Rasio Rekomendasi Otomatis (berbasis Origin + Proses + Roast + Mode, presisi 0.5)
+          const recommendedRatio = computed(() => {
+            let base = currentOrigin.value.ratioDefault;
+            if (currentRoast.value.id === 'medium-dark') base -= 0.5;
+            if (currentRoast.value.id === 'light') base += 0.5;
+            if (currentProcess.value.ratioOffset < 0) base -= 0.5;
+            if (mode.value === 'iced') {
+              base = Math.min(base, 15);
+            }
+            // Bulatkan ke kelipatan 0.5 terdekat lalu batasi 14–17
+            const rounded = Math.round(base * 2) / 2;
+            const clamped = Math.min(17, Math.max(14, rounded));
+            // Sesuaikan ke salah satu opsi tombol [14, 15, 15.5, 16, 17]
+            const allowed = [14, 15, 15.5, 16, 17];
+            return allowed.reduce((prev, curr) =>
+              Math.abs(curr - clamped) < Math.abs(prev - clamped) ? curr : prev
+            );
+          });
+
+          // Sinkronkan rasio otomatis jika user tidak override manual
+          watch(recommendedRatio, (newRec) => {
+            if (!isRatioManual.value) {
+              ratio.value = newRec;
+            }
+          }, { immediate: true });
+
+          const ratioHint = computed(() => {
+            const map = {
+              14: 'Lebih pekat & bold',
+              15: 'Kaya rasa & manis (ideal untuk Es / Gayo)',
+              15.5: 'Sweet-spot serbaguna & seimbang',
+              16: 'Aromatik & jernih (standar emas)',
+              17: 'Lebih ringan & lembut (tea-like)'
+            };
+            return map[ratio.value] || '';
+          });
+
+          // Tips Ekstraksi Dinamis Gabungan Origin + Proses + Roast
+          const dynamicBeanTip = computed(() => {
+            const parts = [currentOrigin.value.tip];
+            if (currentProcess.value.id !== 'washed') {
+              parts.push(currentProcess.value.tip);
+            } else if (currentRoast.value.id === 'medium-dark') {
+              parts.push('Karena Medium-Dark lebih rapuh, hindari agitasi berlebih agar tidak muncul rasa pahit gosong.');
+            }
+            return parts.join(' ');
+          });
+
+          // ==================== COMPUTED: KALKULASI VOLUME & JADWAL ====================
+          const totalLiquid = computed(() => Math.round(coffeeGrams.value * ratio.value));
+          const iceGrams = computed(() => mode.value === 'iced' ? Math.round(totalLiquid.value * (icePercent.value / 100)) : 0);
+          const hotWater = computed(() => totalLiquid.value - iceGrams.value);
+
+          const steps = computed(() => {
+            const water = hotWater.value;
+            const isIced = mode.value === 'iced';
+            const doseExtra = coffeeGrams.value >= 25 ? 10 : coffeeGrams.value >= 20 ? 5 : 0;
+            const isHighFines = selectedOriginId.value === 'ethiopia';
+
+            let blueprint = [];
+
+            if (method.value === 'balanced') {
+              // Bloom ~2.5x berat kopi (dibatasi 20–28% dari air panas agar aman di mode iced)
+              const bloomRatio = Math.min(0.28, Math.max(0.20, (coffeeGrams.value * 2.5) / Math.max(1, water)));
+              const rem = 1 - bloomRatio;
+              blueprint = [
+                {
+                  name: 'Blooming',
+                  ratio: bloomRatio,
+                  duration: 45,
+                  isPour: true,
+                  tip: isHighFines
+                    ? 'Basahi bubuk kopi secara lembut melingkar dari tengah. Cukup goyangkan ringan 1x agar fines tidak menyumbat filter.'
+                    : 'Tuang perlahan melingkar dari tengah hingga semua bubuk kopi basah merata, lalu swirl lembut agar gas CO2 lepas.'
+                },
+                {
+                  name: 'Tuangan 1 (Ekstraksi Awal)',
+                  ratio: rem * 0.40,
+                  duration: isIced ? 25 : 30,
+                  isPour: true,
+                  tip: 'Tuang melingkar stabil dari tengah ke luar dengan aliran halus. Hindari menyiram dinding kertas filter secara langsung.'
+                },
+                {
+                  name: 'Tuangan 2 (Keseimbangan)',
+                  ratio: rem * 0.32,
+                  duration: isIced ? 25 : 30,
+                  isPour: true,
+                  tip: 'Jaga ketinggian air tetap konsisten dengan gerakan spiral tenang untuk mengangkat rasa manis alami kopi.'
+                },
+                {
+                  name: 'Tuangan Akhir',
+                  ratio: rem * 0.28,
+                  duration: isIced ? 25 : 30,
+                  isPour: true,
+                  tip: 'Tuang lembut di pusat lalu melingkar kecil hingga mencapai target berat akhir.'
+                },
+                {
+                  name: 'Drawdown (Tunggu Tetesan)',
+                  ratio: 0,
+                  duration: (isIced ? 25 : 30) + doseExtra,
+                  isPour: false,
+                  tip: isIced
+                    ? 'Biarkan kopi menetes tuntas ke es batu. Angkat dripper dan goyangkan server agar suhu dingin merata.'
+                    : 'Biarkan air turun sepenuhnya hingga permukaan ampas rata. Angkat dripper, goyangkan server, dan nikmati.'
+                }
+              ];
+            } else if (method.value === 'kasuya') {
+              // Tetsu Kasuya 4:6 (5 Tuangan) dengan kustomisasi 40% pertama (Manis/Seimbang/Cerah)
+              const stepDur = isIced ? 35 : 45;
+              const kf = currentKasuyaFlavor.value;
+              blueprint = [
+                {
+                  name: `Tuangan 1 — Blooming (${Math.round(kf.p1 * 100)}% • ${kf.name})`,
+                  ratio: kf.p1,
+                  duration: stepDur,
+                  isPour: true,
+                  tip: kf.id === 'sweet'
+                    ? 'Tuangan awal lebih kecil (15%) untuk menonjolkan rasa manis di fase 40% pertama. Tuang merata hingga seluruh bubuk basah.'
+                    : kf.id === 'bright'
+                    ? 'Tuangan awal lebih besar (25%) untuk menonjolkan keasaman cerah & segar. Tuang merata dan tunggu air hampir surut.'
+                    : 'Bagian pertama fase 40% (seimbang asam & manis). Tuang merata dan tunggu air hampir surut.'
+                },
+                {
+                  name: `Tuangan 2 — Pengatur Rasa (${Math.round(kf.p2 * 100)}%)`,
+                  ratio: kf.p2,
+                  duration: stepDur,
+                  isPour: true,
+                  tip: 'Melengkapi fase 40% pertama. Tuang melingkar perlahan, biarkan permukaan air turun sebelum masuk ke fase body.'
+                },
+                {
+                  name: 'Tuangan 3 — Kekuatan I (60% Akhir)',
+                  ratio: 0.20,
+                  duration: stepDur,
+                  isPour: true,
+                  tip: 'Memasuki fase 60% untuk membangun body & intensitas. Jaga kecepatan aliran air tetap stabil.'
+                },
+                {
+                  name: 'Tuangan 4 — Kekuatan II (60% Akhir)',
+                  ratio: 0.20,
+                  duration: stepDur,
+                  isPour: true,
+                  tip: 'Tuang melingkar tenang saat permukaan air mulai turun. Pertahankan suhu air tetap terjaga.'
+                },
+                {
+                  name: 'Tuangan 5 — Final & Drawdown',
+                  ratio: 0.20,
+                  duration: (isIced ? 35 : 40) + doseExtra,
+                  isPour: true,
+                  tip: isIced
+                    ? 'Tuangan terakhir! Tunggu tetesan tuntas ke es batu, lalu putar server perlahan hingga dingin menyegarkan.'
+                    : 'Tuangan terakhir hingga target akhir. Biarkan menetes tuntas untuk menikmati kekayaan body metode 4:6.'
+                }
+              ];
+            } else {
+              // Cepat & Clean (Bloom 35 dtk + 1 Tuangan Utama Lambat + Drawdown)
+              blueprint = [
+                {
+                  name: 'Blooming Cepat',
+                  ratio: 0.25,
+                  duration: 35,
+                  isPour: true,
+                  tip: 'Basahi seluruh bubuk kopi dengan cepat dan merata. Diamkan 35 detik hingga gelembung udara (bloom) tenang.'
+                },
+                {
+                  name: 'Tuangan Utama Lambat',
+                  ratio: 0.75,
+                  duration: isIced ? 55 : 65,
+                  isPour: true,
+                  tip: 'Tuang perlahan dan konsisten dalam satu aliran melingkar kecil di tengah hingga mencapai target akhir untuk hasil jernih (tea-like).'
+                },
+                {
+                  name: 'Drawdown Akhir',
+                  ratio: 0,
+                  duration: (isIced ? 25 : 30) + doseExtra,
+                  isPour: false,
+                  tip: isIced
+                    ? 'Biarkan tetesan selesai ke atas es batu, lalu goyangkan server untuk mengunci aroma segar kopi.'
+                    : 'Tunggu air turun sepenuhnya. Teknik 1 tuangan ini menghasilkan clarity tinggi dengan aftertaste bersih.'
+                }
+              ];
+            }
+
+            // Pastikan pembulatan volume selalu pas dengan hotWater
+            const pourIndices = blueprint.map((b, i) => (b.ratio > 0 ? i : -1)).filter(i => i !== -1);
+            const lastPourIdx = pourIndices[pourIndices.length - 1];
+
+            let accWater = 0;
+            let curTime = 0;
+
+            return blueprint.map((item, idx) => {
+              let amount = 0;
+              if (item.ratio > 0) {
+                amount = idx === lastPourIdx ? water - accWater : Math.round(water * item.ratio);
+              }
+              accWater += amount;
+              const start = curTime;
+              const end = curTime + item.duration;
+              curTime = end;
+
+              return {
+                index: idx,
+                name: item.name,
+                start,
+                end,
+                duration: item.duration,
+                amount,
+                cumulative: accWater,
+                isPour: item.isPour,
+                tip: item.tip
+              };
+            });
+          });
+
+          const totalDuration = computed(() => {
+            const list = steps.value;
+            return list.length ? list[list.length - 1].end : 0;
+          });
+
+          // ==================== COMPUTED: SIMULATOR & SVG ====================
+          const isFinished = computed(() => totalDuration.value > 0 && elapsedSeconds.value >= totalDuration.value);
+
+          const activeStepIndex = computed(() => {
+            const t = elapsedSeconds.value;
+            const list = steps.value;
+            for (let i = 0; i < list.length; i++) {
+              if (t < list[i].end) return i;
+            }
+            return Math.max(0, list.length - 1);
+          });
+
+          const activeStep = computed(() => steps.value[activeStepIndex.value] || steps.value[0]);
+          const nextStep = computed(() => steps.value[activeStepIndex.value + 1] || null);
+
+          const overallPct = computed(() => {
+            if (!totalDuration.value) return 0;
+            return Math.min(100, Math.round((elapsedSeconds.value / totalDuration.value) * 100));
+          });
+
+          const stepRemainingSeconds = computed(() => Math.max(0, activeStep.value.end - elapsedSeconds.value));
+
+          const stepProgressPct = computed(() => {
+            const s = activeStep.value;
+            if (!s || !s.duration) return 0;
+            const el = Math.max(0, elapsedSeconds.value - s.start);
+            return Math.min(100, Math.round((el / s.duration) * 100));
+          });
+
+          const isPouringNow = computed(() => isRunning.value && !isFinished.value && activeStep.value.isPour);
+
+          const statusBadgeText = computed(() => {
+            if (isFinished.value) return 'Seduhan Selesai!';
+            if (isRunning.value) return 'Sedang Menyeduh...';
+            if (elapsedSeconds.value > 0) return 'Dijeda';
+            return 'Siap Menyeduh';
+          });
+
+          const statusBadgeClass = computed(() => {
+            if (isFinished.value) return 'bg-emerald-100 text-emerald-800';
+            if (isRunning.value) return 'bg-terracotta-500/20 text-terracotta-700 animate-pulse';
+            if (elapsedSeconds.value > 0) return 'bg-amber-100 text-amber-800';
+            return 'bg-paper-200 text-espresso-700';
+          });
+
+          // Ketinggian cairan kopi pada SVG Server
+          const svgLiquidHeight = computed(() => {
+            const water = hotWater.value;
+            if (!water) return 0;
+            let currentInServer = 0;
+            if (isFinished.value) {
+              currentInServer = water;
+            } else if (elapsedSeconds.value > 0) {
+              const idx = activeStepIndex.value;
+              const prevCum = idx > 0 ? steps.value[idx - 1].cumulative : 0;
+              const s = activeStep.value;
+              const frac = Math.min(1, Math.max(0, (elapsedSeconds.value - s.start) / s.duration));
+              currentInServer = prevCum + s.amount * frac;
+            }
+            return Math.round((currentInServer / water) * 68);
+          });
+
+          const svgLiquidY = computed(() => 212 - svgLiquidHeight.value);
+
+          // ==================== AUDIO ENGINE (WEB AUDIO API) ====================
+          let audioCtx = null;
+
+          function initAudio() {
+            try {
+              if (!audioCtx) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtx) audioCtx = new AudioCtx();
+              }
+              if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+              }
+            } catch (e) {
+              // Abaikan jika browser membatasi Web Audio API
+            }
+          }
+
+          function playChime(type) {
+            if (!soundEnabled.value) return;
+            try {
+              initAudio();
+              if (!audioCtx) return;
+              const now = audioCtx.currentTime;
+              const notes =
+                type === 'finish'
+                  ? [523.25, 659.25, 783.99, 1046.5]
+                  : type === 'start'
+                  ? [523.25, 659.25]
+                  : [587.33, 880.0];
+
+              notes.forEach((freq, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + i * 0.12);
+                gain.gain.setValueAtTime(0.001, now + i * 0.12);
+                gain.gain.exponentialRampToValueAtTime(0.14, now + i * 0.12 + 0.03);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.12 + 0.45);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now + i * 0.12);
+                osc.stop(now + i * 0.12 + 0.48);
+              });
+            } catch (e) {
+              // Fallback diam
+            }
+          }
+
+          // ==================== HELPERS & ACTIONS ====================
+          function formatTime(sec) {
+            const s = Math.max(0, Math.floor(sec));
+            const m = Math.floor(s / 60);
+            const rem = s % 60;
+            return `${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
+          }
+
+          function showToast(msg) {
+            toastMessage.value = msg;
+            toastVisible.value = true;
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+              toastVisible.value = false;
+            }, 2600);
+          }
+
+          function scrollActiveStepIntoView(idx) {
+            nextTick(() => {
+              const el = document.getElementById('brew-step-' + idx);
+              if (el && isRunning.value) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }
+            });
+          }
+
+          // Pengubah Profil Biji
+          function selectOrigin(id) {
+            selectedOriginId.value = id;
+            const found = origins.find(o => o.id === id);
+            if (found) {
+              // Otomatis arahkan ke proses & roast khas origin agar langsung relevan
+              selectedProcessId.value = found.defaultProcess;
+              selectedRoastId.value = found.defaultRoast;
+            }
+            resetTimer(true);
+          }
+
+          function selectProcess(id) {
+            selectedProcessId.value = id;
+            resetTimer(true);
+          }
+
+          function selectRoast(id) {
+            selectedRoastId.value = id;
+            resetTimer(true);
+          }
+
+          // Pengubah Parameter Seduh
+          function setMode(newMode) {
+            if (mode.value === newMode) return;
+            mode.value = newMode;
+            isRatioManual.value = false; // Kembali ke auto-ratio saat ganti Panas/Dingin
+            ratio.value = recommendedRatio.value;
+            resetTimer(true);
+          }
+
+          function setCoffeeGrams(val) {
+            const clamped = Math.min(40, Math.max(10, Math.round(Number(val) || 15)));
+            if (clamped === coffeeGrams.value) return;
+            coffeeGrams.value = clamped;
+            resetTimer(true);
+          }
+
+          function setIcePercent(pct) {
+            icePercent.value = pct;
+            resetTimer(true);
+          }
+
+          function setManualRatio(r) {
+            ratio.value = r;
+            isRatioManual.value = r !== recommendedRatio.value;
+            resetTimer(true);
+          }
+
+          function resetRatioToAuto() {
+            isRatioManual.value = false;
+            ratio.value = recommendedRatio.value;
+            resetTimer(true);
+            showToast(`Rasio dikembalikan ke rekomendasi 1:${recommendedRatio.value}`);
+          }
+
+          function selectMethod(m) {
+            method.value = m;
+            resetTimer(true);
+          }
+
+          function selectKasuyaFlavor(kfId) {
+            kasuyaFlavor.value = kfId;
+            resetTimer(true);
+          }
+
+          // Kontrol Timer
+          function startTimer() {
+            initAudio();
+            if (isFinished.value) {
+              elapsedSeconds.value = 0;
+              lastAnnouncedStepIndex = -1;
+            }
+
+            isRunning.value = true;
+            const curIdx = activeStepIndex.value;
+            if (lastAnnouncedStepIndex !== curIdx) {
+              playChime(elapsedSeconds.value === 0 ? 'start' : 'step');
+              lastAnnouncedStepIndex = curIdx;
+            }
+
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+              elapsedSeconds.value += 1;
+
+              if (elapsedSeconds.value >= totalDuration.value) {
+                elapsedSeconds.value = totalDuration.value;
+                pauseTimer();
+                playChime('finish');
+                showToast('Seduhan V60 selesai! Selamat menikmati kopi Anda.');
+                return;
+              }
+
+              const newIdx = activeStepIndex.value;
+              if (newIdx !== lastAnnouncedStepIndex) {
+                lastAnnouncedStepIndex = newIdx;
+                playChime('step');
+                scrollActiveStepIntoView(newIdx);
+              }
+            }, 1000);
+          }
+
+          function pauseTimer() {
+            isRunning.value = false;
+            clearInterval(timerInterval);
+            timerInterval = null;
+          }
+
+          function toggleStartPause() {
+            if (isRunning.value) {
+              pauseTimer();
+            } else {
+              startTimer();
+            }
+          }
+
+          function resetTimer(silent = false) {
+            pauseTimer();
+            elapsedSeconds.value = 0;
+            lastAnnouncedStepIndex = -1;
+            if (!silent) showToast('Timer direset ke 00:00');
+          }
+
+          function jumpToStep(idx) {
+            if (idx < 0 || idx >= steps.value.length) return;
+            elapsedSeconds.value = steps.value[idx].start;
+            lastAnnouncedStepIndex = idx;
+            if (isRunning.value) playChime('step');
+          }
+
+          function prevStep() {
+            const idx = activeStepIndex.value;
+            if (elapsedSeconds.value > steps.value[idx].start + 2) {
+              jumpToStep(idx);
+            } else if (idx > 0) {
+              jumpToStep(idx - 1);
+            } else {
+              jumpToStep(0);
+            }
+          }
+
+          function skipToNextStep() {
+            const idx = activeStepIndex.value;
+            if (idx < steps.value.length - 1) {
+              jumpToStep(idx + 1);
+            } else {
+              elapsedSeconds.value = totalDuration.value;
+              pauseTimer();
+            }
+          }
+
+          function toggleSound() {
+            soundEnabled.value = !soundEnabled.value;
+            if (soundEnabled.value) {
+              playChime('start');
+              showToast('Notifikasi suara diaktifkan');
+            } else {
+              showToast('Notifikasi suara dibisukan');
+            }
+          }
+
+          // Salin Resep Lengkap
+          function copyRecipe() {
+            const modeLabel = mode.value === 'iced'
+              ? `Dingin (Japanese Iced - ${icePercent.value}% Es)`
+              : 'Panas (Hot V60)';
+            const methodObj = methods.find(m => m.id === method.value);
+            const methodLabel = method.value === 'kasuya'
+              ? `${methodObj.name} — Karakter: ${currentKasuyaFlavor.value.name} (${currentKasuyaFlavor.value.splitLabel})`
+              : (methodObj ? methodObj.name : method.value);
+
+            let text = `=== RESEP SEDUH V60 ===\n`;
+            text += `Origin: ${currentOrigin.value.name} (${currentOrigin.value.altitude})\n`;
+            text += `Flavor Notes: ${currentOrigin.value.notes.join(', ')}\n`;
+            text += `Proses: ${currentProcess.value.name} | Roast: ${currentRoast.value.name}\n`;
+            text += `Mode: ${modeLabel}\n`;
+            text += `Metode: ${methodLabel}\n`;
+            text += `Dosis Kopi: ${coffeeGrams.value}g | Rasio 1:${ratio.value} | Total Sajian: ${totalLiquid.value}ml\n`;
+            if (mode.value === 'iced') {
+              text += `Es Batu di Server: ${iceGrams.value}g\n`;
+            }
+            text += `Air Panas Seduh: ${hotWater.value}ml | Suhu Ideal: ${calibratedTemp.value}°C\n`;
+            text += `Gilingan: ${calibratedGrind.value.label} (${calibratedGrind.value.microns} | ${calibratedGrind.value.clicks})\n`;
+            text += `Estimasi Waktu: ${formatTime(totalDuration.value)}\n\n`;
+            text += `JADWAL LANGKAH SEDUH:\n`;
+
+            steps.value.forEach((s, i) => {
+              const action = s.amount > 0 ? `+${s.amount}ml (Target ${s.cumulative}g)` : `Drawdown hingga selesai`;
+              text += `${i + 1}. [${formatTime(s.start)}-${formatTime(s.end)}] ${s.name}: ${action}\n`;
+            });
+
+            text += `\nTips Biji: ${dynamicBeanTip.value}`;
+
+            try {
+              const textarea = document.createElement('textarea');
+              textarea.value = text;
+              textarea.setAttribute('readonly', '');
+              textarea.style.position = 'fixed';
+              textarea.style.left = '-9999px';
+              document.body.appendChild(textarea);
+              textarea.select();
+              document.execCommand('copy');
+              document.body.removeChild(textarea);
+              showToast('Resep lengkap berhasil disalin!');
+            } catch (err) {
+              showToast('Gagal menyalin resep.');
+            }
+          }
+
+          return {
+            regions,
+            origins,
+            filteredOrigins,
+            processes,
+            roasts,
+            iceOptions,
+            methods,
+            kasuyaFlavors,
+
+            selectedRegion,
+            selectedOriginId,
+            selectedProcessId,
+            selectedRoastId,
+            currentOrigin,
+            currentProcess,
+            currentRoast,
+            currentKasuyaFlavor,
+
+            calibratedTemp,
+            calibratedGrind,
+            recommendedRatio,
+            dynamicBeanTip,
+
+            mode,
+            coffeeGrams,
+            icePercent,
+            ratio,
+            isRatioManual,
+            ratioHint,
+            method,
+            kasuyaFlavor,
+
+            totalLiquid,
+            iceGrams,
+            hotWater,
+            steps,
+            totalDuration,
+
+            soundEnabled,
+            isRunning,
+            elapsedSeconds,
+            isFinished,
+            activeStepIndex,
+            activeStep,
+            nextStep,
+            overallPct,
+            stepRemainingSeconds,
+            stepProgressPct,
+            isPouringNow,
+            statusBadgeText,
+            statusBadgeClass,
+            svgLiquidHeight,
+            svgLiquidY,
+
+            toastVisible,
+            toastMessage,
+
+            formatTime,
+            selectOrigin,
+            selectProcess,
+            selectRoast,
+            setMode,
+            setCoffeeGrams,
+            setIcePercent,
+            setManualRatio,
+            resetRatioToAuto,
+            selectMethod,
+            selectKasuyaFlavor,
+            toggleStartPause,
+            resetTimer,
+            jumpToStep,
+            prevStep,
+            skipToNextStep,
+            toggleSound,
+            copyRecipe
+          };
+        }
+      }).mount('#app');
+    })();
+  </script>
+</body>
+</html>
