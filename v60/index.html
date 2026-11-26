@@ -162,6 +162,11 @@
     .pb-safe-bar {
       padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
     }
+
+    /* Mencegah browser scroll-anchoring menggeser layar saat status tahap berubah */
+    .no-scroll-anchor {
+      overflow-anchor: none;
+    }
   </style>
 </head>
 <body class="min-h-screen bg-paper-100 text-espresso-900 selection:bg-terracotta-400/30 overflow-x-hidden">
@@ -979,9 +984,9 @@
             </div>
 
             <!-- Daftar Langkah -->
-            <div class="space-y-2.5">
+            <!-- Daftar Langkah (tetap reaktif tanpa memicu scroll halaman) -->
+            <div class="space-y-2.5 no-scroll-anchor">
               <button v-for="(step, idx) in steps" :key="step.index" type="button"
-                :id="'brew-step-' + idx"
                 @click="jumpToStep(idx)"
                 :class="[
                   'w-full text-left rounded-2xl p-3.5 sm:p-4 border-2 transition flex flex-col gap-2 active:scale-[0.99]',
@@ -1098,7 +1103,7 @@
     (function () {
       'use strict';
 
-      const { createApp, ref, computed, watch, nextTick, onMounted, onUnmounted } = Vue;
+      const { createApp, ref, computed, watch, onMounted, onUnmounted } = Vue;
 
       createApp({
         setup() {
@@ -1839,15 +1844,6 @@
             }, 2600);
           }
 
-          function scrollActiveStepIntoView(idx) {
-            nextTick(() => {
-              const el = document.getElementById('brew-step-' + idx);
-              if (el && isRunning.value) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-              }
-            });
-          }
-
           // ==================== SCREEN WAKE LOCK ENGINE ====================
           async function requestWakeLock(silent = false) {
             if (!wakeLockSupported) {
@@ -2016,7 +2012,6 @@
               if (newIdx !== lastAnnouncedStepIndex) {
                 lastAnnouncedStepIndex = newIdx;
                 playChime('step');
-                scrollActiveStepIntoView(newIdx);
               }
             }, 1000);
           }
